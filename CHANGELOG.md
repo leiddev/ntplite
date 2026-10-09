@@ -84,8 +84,9 @@ README for what is left.
 - `wait_readable` / `wait_writable` over `select(2)`, retrying interrupted waits
   against the remaining budget instead of giving up early.
 - `udp_socket`: a move-only, non-throwing socket wrapper with connect, bind,
-  non-blocking mode, address reuse and broadcast, raw send/receive, and
-  `local_endpoint` for discovering the port the kernel chose.
+  non-blocking mode, address reuse and broadcast, raw send/receive,
+  `is_connected`, and `local_endpoint` for discovering the port the kernel
+  chose.
 - Winsock and POSIX are both supported from the same header. `WIN32_LEAN_AND_MEAN`
   and `NOMINMAX` are applied before the first Windows header is read, and a
   translation unit that has already included `<windows.h>` without them gets an
@@ -227,6 +228,14 @@ README for what is left.
   it again, spending a whole extra timeout and a second datagram on a question it
   had already had answered. Repeats are now dropped, keeping the resolver's
   order.
+- Sending no longer hands a destination to a socket that already has a peer.
+  `send_to()` called `sendto()` unconditionally, which Linux and Winsock accept
+  and the BSD-derived stacks do not: macOS fails the call with `EISCONN`, so
+  every query died as a network error before its first datagram left the
+  machine, and no test noticed because the whole suite had only ever run on
+  Windows and Linux. The address is now passed only while the socket is
+  unconnected, where it is the only thing that can mean anything, and the
+  `send_to_on_a_connected_socket_still_sends` case covers it.
 
 [Unreleased]: https://github.com/leiddev/ntplite/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/leiddev/ntplite/releases/tag/v0.1.0

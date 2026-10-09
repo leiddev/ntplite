@@ -13,7 +13,8 @@
 //   * Only UDP datagrams are supported; NTP never uses anything else.  A
 //     *connected* UDP socket gives us the kernel's own error reporting for the
 //     ICMP "port unreachable" replies a dead server produces, which is worth
-//     more than the convenience of sendto().
+//     more than the convenience of sendto().  What a connected socket does
+//     *not* tolerate is being handed a destination as well - see send_to().
 //   * Timeouts use select(2) rather than poll(2) because Winsock has no poll,
 //     and we never wait on more than one descriptor at a time.
 //   * Deadlines are measured against std::chrono::steady_clock.  A wall-clock
@@ -751,19 +752,23 @@ inline wait_result wait_writable(native_socket handle, int timeout_ms,
 /// usable from exception-free builds.
 class udp_socket {
  public:
-  udp_socket() NTP_LITE_NOEXCEPT : handle_(invalid_native_socket()) {}
+  udp_socket() NTP_LITE_NOEXCEPT : handle_(invalid_native_socket()), connected_(false) {}
 
   ~udp_socket() { close(); }
 
-  udp_socket(udp_socket&& other) NTP_LITE_NOEXCEPT : handle_(other.handle_) {
+  udp_socket(udp_socket&& other) NTP_LITE_NOEXCEPT : handle_(other.handle_),
+                                                     connected_(other.connected_) {
     other.handle_ = invalid_native_socket();
+    other.connected_ = false;
   }
 
   udp_socket& operator=(udp_socket&& other) NTP_LITE_NOEXCEPT {
     if (this != &other) {
       close();
       handle_ = other.handle_;
+      connected_ = other.connected_;
       other.handle_ = invalid_native_socket();
+      other.connected_ = false;
     }
     return *this;
   }
@@ -824,6 +829,7 @@ class udp_socket {
       ec = classify_socket_error(last_socket_error());
       return false;
     }
+    connected_ = true;
     ec = error_code::ok;
     return true;
   }
@@ -890,9 +896,13 @@ class udp_socket {
     ::close(handle_);
 #endif
     handle_ = invalid_native_socket();
+    connected_ = false;
   }
 
   bool is_open() const NTP_LITE_NOEXCEPT { return socket_is_valid(handle_); }
+
+  /// Whether connect() has succeeded and the socket still has that peer.
+  bool is_connected() const NTP_LITE_NOEXCEPT { return is_open() && connected_; }
 
   native_socket handle() const NTP_LITE_NOEXCEPT { return handle_; }
 
@@ -942,13 +952,25 @@ class udp_socket {
   }
 
   /// Sends one datagram to `to`, whether or not the socket is connected.
+  ///
+  /// The two cases take different routes on purpose.  Once connect() has run,
+  /// the kernel has already fixed the destination and vets every source for us,
+  /// and the BSD-derived stacks - macOS among them - refuse the second opinion:
+  /// sendto() on a connected socket fails with EISCONN *even when the address is
+  /// the one the socket is connected to*.  Linux and Winsock are happy to
+  /// ignore the address instead, which is why passing it everywhere can look
+  /// harmless right up to the first Mac.  Handing the address over only while
+  /// the socket is still unconnected is also the only reading that means
+  /// anything.
   bool send_to(const endpoint& to, const void* data, std::size_t size,
                error_code& ec) NTP_LITE_NOEXCEPT {
     if (!socket_is_valid(handle_) || !to.valid() || data == nullptr) {
       ec = error_code::invalid_argument;
       return false;
     }
-    const int sent = ::sendto(handle_, static_cast<const char*>(data), static_cast<int>(size), 0,
+    const int sent =
+        connected_ ? ::send(handle_, static_cast<const char*>(data), static_cast<int>(size), 0)
+                   : ::sendto(handle_, static_cast<const char*>(data), static_cast<int>(size), 0,
                               to.native_address(), to.native_length());
     if (sent < 0) {
       ec = classify_socket_error(last_socket_error());
@@ -1023,6 +1045,10 @@ class udp_socket {
   }
 
   native_socket handle_;
+  /// Whether connect() has succeeded on `handle_`.  Kept because send_to() has
+  /// to know: a destination may be handed to the kernel only while the socket
+  /// still has no peer (see send_to()).
+  bool connected_;
 };
 
 }  // namespace detail
