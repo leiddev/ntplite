@@ -97,7 +97,25 @@ inline std::uint16_t client_local_port(udp_socket& socket) {
   return client_local_address(socket).port();
 }
 
-/// How many datagrams are queued on a peer, without waiting for any.
+/// How long the wire is given to finish delivering before the count is trusted.
+///
+/// Generous on purpose: it is only ever paid once per drain() call, by a test
+/// that has already finished its work.
+const std::int64_t kDrainSettleMilliseconds = 500;
+
+/// How many datagrams are queued on a peer, once the wire has gone quiet.
+///
+/// The waiting is not a convenience.  A datagram that has been handed to the
+/// kernel is not on the peer's queue yet: the two ends are separate sockets, and
+/// the BSD-derived stacks - macOS among them - deliver loopback packets from a
+/// kernel thread that runs when it runs.  Counting the instant a client stops
+/// waiting therefore races the delivery of its last request, while Linux and
+/// Windows deliver inside the send call itself, which is why a test that counts
+/// immediately can look right for years and then fail on a Mac.  The count is
+/// taken once nothing has arrived for kDrainSettleMilliseconds; a datagram that
+/// the kernel actually dropped is indistinguishable from one that is merely
+/// slow, so a test that must not see a drop has to assert on the sending side
+/// (`result.attempts`) as well.
 inline int drain(loopback_peer& peer) {
   error_code ec = error_code::ok;
   if (!peer.socket.set_nonblocking(true, ec)) {
@@ -106,6 +124,12 @@ inline int drain(loopback_peer& peer) {
   int count = 0;
   std::uint8_t buffer[::ntplite::detail::max_datagram_size];
   for (;;) {
+    // wait_readable() also reports a socket with a pending ICMP error as ready,
+    // which the receive below then consumes; the loop ends either way.
+    if (::ntplite::detail::wait_readable(peer.socket.handle(), kDrainSettleMilliseconds, ec) !=
+        ::ntplite::detail::wait_result::ready) {
+      return count;
+    }
     std::size_t received = 0;
     endpoint from;
     if (!peer.socket.receive_from(buffer, sizeof(buffer), received, from, ec)) {

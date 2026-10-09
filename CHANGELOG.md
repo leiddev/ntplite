@@ -195,6 +195,11 @@ README for what is left.
   and a reply that does not echo the request, are both ignored. Registered with
   CTest as `ntplite.cross_validation`, and skipped when the tool is not built or
   no Python 3 interpreter is available.
+- Tests that count the requests a silent peer received wait for the wire to go
+  quiet first. A datagram that has been handed to the kernel is not on the peer's
+  queue yet, so counting the instant the client stops waiting races the delivery
+  of its last request - a race that Linux and Windows hide by delivering loopback
+  packets inside the send call, and that macOS lost on a loaded runner.
 
 ### Changed
 
