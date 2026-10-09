@@ -1,0 +1,59 @@
+# ============================================================================
+# ntplite - .clang-tidy
+# ----------------------------------------------------------------------------
+# The check list is written out rather than assembled from wildcards.  A
+# wildcard silently adopts whatever a newer clang-tidy decides to add, and a
+# build that starts failing on a check nobody chose is a build nobody trusts.
+#
+# The list is deliberately about correctness.  Style belongs to clang-format,
+# which is gated on every push, and the compiler already runs with every warning
+# enabled at -Werror.  What clang-tidy adds is the static analyser and the
+# bug-prone idioms the compiler does not know about.
+#
+# CI runs this over the library only - src/ntplite_c.cpp, plus the generated
+# "header hygiene" translation unit for each public header, one header at a
+# time.  The tests, tools and examples are covered by the compiler, the
+# sanitizers and the test suite itself.
+# ============================================================================
+Checks: >
+  -*,
+
+  clang-analyzer-core.*,
+  clang-analyzer-cplusplus.*,
+  clang-analyzer-deadcode.*,
+  clang-analyzer-security.*,
+  clang-analyzer-unix.*,
+  clang-analyzer-valist.*,
+
+  bugprone-integer-division,
+  bugprone-macro-parentheses,
+  bugprone-signed-char-misuse,
+  bugprone-sizeof-expression,
+  bugprone-string-constructor,
+  bugprone-suspicious-string-compare,
+  bugprone-undefined-memory-manipulation,
+  bugprone-unhandled-self-assignment,
+  bugprone-unused-raii,
+  bugprone-use-after-move,
+
+  cert-dcl21-cpp,
+  cert-err34-c,
+  cert-msc50-cpp,
+  cert-msc51-cpp,
+
+  performance-inefficient-string-concatenation,
+  performance-move-const-arg,
+  performance-unnecessary-copy-initialization
+
+# A finding is a failure.  The whole point of a curated list is that everything
+# on it is worth stopping for; if that stops being true, the entry goes.
+WarningsAsErrors: '*'
+
+# The library is header only, so the findings all live under include/ntplite/.
+# Nothing else is filtered: a header the analyser cannot see is a header that is
+# not being checked.
+HeaderFilterRegex: '.*/include/ntplite/.*'
+
+# The compile flags come from the compile database, which CMake generates with
+# the same options the real build uses.  Restating them here is how a clang-tidy
+# run starts to disagree with the compiler.

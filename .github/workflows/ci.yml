@@ -6,9 +6,17 @@
 # Design goals
 #   * every job is deterministic: no test reaches out to the internet unless
 #     NTP_LITE_ONLINE_TESTS is explicitly enabled;
-#   * the compiler matrix spans both target families (MSVC + GCC + Clang) at
-#     both optimisation levels, so "works on my machine" stays rare;
-#   * warnings are errors, sanitizers run on Linux, formatting is gated.
+#   * the compiler matrix spans every target family (MSVC + GCC + Clang) at both
+#     optimisation levels, on Windows, Linux and macOS, so "works on my machine"
+#     stays rare;
+#   * the ABI is tested where it is easiest to get wrong: a 32-bit build runs the
+#     same suite as the 64-bit ones;
+#   * warnings are errors, and two different analysers run over the library - a
+#     compiler-agnostic one and the static analyser inside clang-tidy - because
+#     they do not find the same things;
+#   * undefined behaviour is hunted twice, once by AddressSanitizer and once by
+#     ThreadSanitizer, since the mock server makes real threads;
+#   * formatting is gated, so review is about behaviour and not about spaces.
 # ============================================================================
 name: CI
 
@@ -80,14 +88,98 @@ jobs:
         run: ctest --test-dir build --output-on-failure
 
   # -------------------------------------------------------------------------
-  # Linux with AddressSanitizer + UndefinedBehaviorSanitizer.
+  # Linux, 32-bit.  The same suite on an ABI where pointers, size_t and long are
+  # half the width, which is where a hand-rolled struct ABI, a 64-bit-only
+  # conversion or an `int` sized for a pointer shows up.
+  # -------------------------------------------------------------------------
+  linux-32-bit:
+    name: linux / gcc / 32-bit
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ninja-build g++-multilib
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DNTP_LITE_WERROR=ON
+          -DNTP_LITE_BUILD_TOOLS=ON
+          -DNTP_LITE_BUILD_EXAMPLES=ON
+          -DCMAKE_C_FLAGS=-m32
+          -DCMAKE_CXX_FLAGS=-m32
+          -DCMAKE_EXE_LINKER_FLAGS=-m32
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  # -------------------------------------------------------------------------
+  # macOS.  The POSIX side of the socket layer, on a libc and a kqueue-shaped
+  # environment that is neither Linux nor Windows; <sys/select.h> covers it, and
+  # this is what proves that.
+  # -------------------------------------------------------------------------
+  macos:
+    name: macos / appleclang / ${{ matrix.build_type }}
+    runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Debug, Release]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          -DNTP_LITE_WERROR=ON
+          -DNTP_LITE_BUILD_TOOLS=ON
+          -DNTP_LITE_BUILD_EXAMPLES=ON
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  # -------------------------------------------------------------------------
+  # Linux with sanitizers.  Two of them, because they answer different
+  # questions: AddressSanitizer + UndefinedBehaviorSanitizer cover memory and
+  # arithmetic, and ThreadSanitizer covers the ordering - which matters here
+  # because the mock NTP server is a real thread with a real socket.
+  #
+  # They cannot be combined: the run times are mutually exclusive, and ntplite's
+  # CMake refuses the combination rather than producing a binary that dies at
+  # start-up.
   # -------------------------------------------------------------------------
   sanitizers:
-    name: linux / clang / asan+ubsan
+    name: linux / clang / ${{ matrix.sanitizers == 'thread' && 'tsan' || 'asan+ubsan' }}
     runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizers: ["address,undefined", thread]
     env:
       CC: clang
       CXX: clang++
+      ASAN_OPTIONS: detect_leaks=1:strict_string_checks=1:check_initialization_order=1
+      UBSAN_OPTIONS: print_stacktrace=1
+      TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1
     steps:
       - uses: actions/checkout@v4
 
@@ -105,15 +197,12 @@ jobs:
           cmake -S . -B build -G Ninja
           -DCMAKE_BUILD_TYPE=Debug
           -DNTP_LITE_WERROR=ON
-          -DNTP_LITE_SANITIZE=ON
+          -DNTP_LITE_SANITIZE=${{ matrix.sanitizers }}
 
       - name: Build
         run: cmake --build build --parallel
 
       - name: Test
-        env:
-          ASAN_OPTIONS: detect_leaks=1:strict_string_checks=1:check_initialization_order=1
-          UBSAN_OPTIONS: print_stacktrace=1
         run: ctest --test-dir build --output-on-failure
 
   # -------------------------------------------------------------------------
@@ -145,6 +234,94 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build -C ${{ matrix.build_type }} --output-on-failure
+
+  # -------------------------------------------------------------------------
+  # Static analysis, part one: clang-tidy.
+  #
+  # It runs over the library only - src/ntplite_c.cpp and the generated header
+  # hygiene translation units, one per public header.  That is the whole of the
+  # code a consumer compiles, in the smallest translation units that compile it,
+  # which makes the run fast and every finding impossible to dismiss as "the
+  # test code".
+  #
+  # The check list lives in .clang-tidy, and is written out rather than assembled
+  # from wildcards, so this job cannot start failing because a runner upgraded
+  # its clang-tidy.
+  # -------------------------------------------------------------------------
+  clang-tidy:
+    name: static analysis / clang-tidy
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ninja-build clang-tidy
+
+      - name: Show toolchain versions
+        run: |
+          clang-tidy --version | head -n 2
+          cmake --version | head -n 1
+
+      # Configure only: the header hygiene sources are generated, and every
+      # compile command is written to compile_commands.json, which is what
+      # clang-tidy reads to know the include paths and the language standard.
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          -DNTP_LITE_BUILD_TOOLS=ON
+          -DNTP_LITE_BUILD_EXAMPLES=ON
+
+      - name: Run clang-tidy
+        run: |
+          set -x
+          clang-tidy -p build --warnings-as-errors='*' \
+            src/ntplite_c.cpp \
+            build/tests/hygiene/*.cpp \
+            build/tests/hygiene/*.c
+
+  # -------------------------------------------------------------------------
+  # Static analysis, part two: cppcheck.
+  #
+  # A second opinion from a different project, with different blind spots.  The
+  # same narrow scope as clang-tidy, for the same reason.
+  # -------------------------------------------------------------------------
+  cppcheck:
+    name: static analysis / cppcheck
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake cppcheck
+
+      - name: Show toolchain versions
+        run: cppcheck --version
+
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Debug
+          -DNTP_LITE_BUILD_TOOLS=ON
+          -DNTP_LITE_BUILD_EXAMPLES=ON
+
+      - name: Run cppcheck
+        run: |
+          cppcheck \
+            --enable=warning,performance,portability \
+            --error-exitcode=1 \
+            --inline-suppr \
+            --suppress=missingIncludeSystem \
+            --std=c++11 \
+            --quiet \
+            -Iinclude \
+            src/ntplite_c.cpp \
+            build/tests/hygiene/*.cpp
 
   # -------------------------------------------------------------------------
   # Formatting.  clang-format is pinned so that the check cannot start failing
@@ -182,6 +359,63 @@ jobs:
 
       - name: Check version consistency
         run: python scripts/check_version_sync.py
+
+  # -------------------------------------------------------------------------
+  # Coverage.  Reported, not enforced: a line count is a poor gate, and a job
+  # that fails because a refactor moved a branch around teaches nobody anything.
+  # The report is uploaded so that the number can be looked up when it matters.
+  # -------------------------------------------------------------------------
+  coverage:
+    name: coverage
+    runs-on: ubuntu-22.04
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ninja-build gcc g++
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install gcovr
+        run: python -m pip install --disable-pip-version-check gcovr
+
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DNTP_LITE_BUILD_TOOLS=ON
+          -DNTP_LITE_BUILD_EXAMPLES=ON
+          -DCMAKE_C_FLAGS=--coverage
+          -DCMAKE_CXX_FLAGS=--coverage
+          -DCMAKE_EXE_LINKER_FLAGS=--coverage
+
+      - name: Build and test
+        run: |
+          cmake --build build --parallel
+          ctest --test-dir build --output-on-failure
+
+      - name: Report
+        run: |
+          gcovr --root . \
+            --filter 'include/ntplite/' \
+            --exclude 'tests/' \
+            --print-summary \
+            --html-details build/coverage.html \
+            --txt build/coverage.txt
+          cat build/coverage.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: |
+            build/coverage.html
+            build/coverage.txt
+          if-no-files-found: error
 
   # -------------------------------------------------------------------------
   # Packaging: install into a scratch prefix and consume it from a separate

@@ -32,13 +32,15 @@ README for what is left.
   against the prebuilt library.
 - A separate CMake consumer project (`tests/consumer`) that builds against an
   *installed* ntplite through `find_package`.
-- GitHub Actions: compiler/build-type matrix on Linux (GCC + Clang) and Windows
-  (MSVC), an ASan/UBSan job, a pinned `clang-format` gate, a version-hygiene
-  check, an install + `find_package` packaging job, and CodeQL analysis.
-- Developer tooling: `scripts/format.py`, `scripts/check_version_sync.py` and
-  `scripts/remote_build.ps1`.
-- Repository files: `.clang-format`, `.editorconfig`, `.gitattributes`,
-  `.gitignore`, `LICENSE` (MIT), `README.md`, `release-notes/`.
+- GitHub Actions: a compiler matrix (GCC, Clang, MSVC, AppleClang) across Debug
+  and Release, a 32-bit build, AddressSanitizer + UndefinedBehaviorSanitizer and
+  ThreadSanitizer jobs, `clang-tidy` and `cppcheck` over the library, a pinned
+  `clang-format` gate, a version-hygiene check, an install + `find_package`
+  packaging job, a coverage report, and CodeQL analysis.
+- Developer tooling: `scripts/format.py`, `scripts/check_version_sync.py`,
+  `scripts/cross_validate_ntp.py` and `scripts/remote_build.ps1`.
+- Repository files: `.clang-format`, `.clang-tidy`, `.editorconfig`,
+  `.gitattributes`, `.gitignore`, `LICENSE` (MIT), `README.md`, `release-notes/`.
 
 #### Time conversion layer
 
@@ -195,6 +197,11 @@ README for what is left.
 
 ### Changed
 
+- `NTP_LITE_SANITIZE` accepts a list of sanitizers as well as the on/off
+  spelling. `ON` still means AddressSanitizer + UndefinedBehaviorSanitizer;
+  `-DNTP_LITE_SANITIZE=thread` now builds with ThreadSanitizer instead, and the
+  combination of `thread` with `address` is refused at configure time rather
+  than producing a binary that dies before `main`.
 - Reference identifiers are no longer padded. `reference_id_text` used to render
   all four octets exactly, so the common stratum 1 identifier `"GPS\0"` came out
   as `"GPS."` and an empty identifier as `"...."`. Trailing NUL and space padding

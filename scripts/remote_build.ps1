@@ -13,8 +13,13 @@
 #   pwsh scripts/remote_build.ps1                      # Debug build + ctest
 #   pwsh scripts/remote_build.ps1 -BuildType Release
 #   pwsh scripts/remote_build.ps1 -Sanitize            # ASan + UBSan
+#   pwsh scripts/remote_build.ps1 -SanitizerList thread
 #   pwsh scripts/remote_build.ps1 -SkipSync            # reuse what is there
 #   pwsh scripts/remote_build.ps1 -RemoteDir '~/tmp/ntplite'
+#
+# ExtraConfigureArguments is a way to try a configuration before it earns a CI
+# job of its own, for example:
+#   pwsh scripts/remote_build.ps1 -ExtraConfigureArguments '-DCMAKE_CXX_FLAGS=-fanalyzer -DNTP_LITE_BUILD_TESTS=OFF'
 # ============================================================================
 [CmdletBinding()]
 param(
@@ -25,6 +30,8 @@ param(
   [string] $BuildType = 'Debug',
 
   [switch] $Sanitize,
+  [string] $SanitizerList = '',
+  [string] $ExtraConfigureArguments = '',
   [switch] $SkipSync,
   [switch] $OnlineTests,
   [switch] $KeepBuildDirectory
@@ -58,11 +65,13 @@ if ($normalised -in @('~', '$HOME', '/', '/home', '/root', '', '.')) {
   throw "refusing to use '$RemoteDir' as the remote directory: too dangerous to clean"
 }
 
+$sanitizeFlag = if ($SanitizerList) { $SanitizerList } elseif ($Sanitize) { 'ON' } else { 'OFF' }
+
 Write-Host "ntplite remote build" -ForegroundColor Green
 Write-Host "  target      : $Target"
 Write-Host "  remote dir  : $RemoteDir"
 Write-Host "  build type  : $BuildType"
-Write-Host "  sanitizers  : $([bool]$Sanitize)"
+Write-Host "  sanitizers  : $sanitizeFlag"
 
 # ---------------------------------------------------------------------------
 # 1. Connectivity and toolchain check
@@ -98,17 +107,17 @@ if (-not $SkipSync) {
 # ---------------------------------------------------------------------------
 # 3. Configure, build, test
 # ---------------------------------------------------------------------------
-$sanitizeFlag = if ($Sanitize) { 'ON' } else { 'OFF' }
 $onlineFlag = if ($OnlineTests) { 'ON' } else { 'OFF' }
 
 $clean = if ($KeepBuildDirectory) { '' } else { 'rm -rf build-remote;' }
 
-# AddressSanitizer needs a predictable address space.  gcc-11's libasan on
-# kernel 6.8 intermittently dies with "AddressSanitizer:DEADLYSIGNAL" when
-# ASLR is left at its default entropy (observed at roughly one run in ten, and
-# always in the same binaries).  Disabling ASLR for the test run makes it
-# deterministic; this is an environment quirk, not a defect in ntplite.
-$ctest = if ($Sanitize) {
+# Any sanitizer needs a predictable address space.  gcc-11's libasan on kernel
+# 6.8 intermittently dies with "AddressSanitizer:DEADLYSIGNAL" when ASLR is left
+# at its default entropy (observed at roughly one run in ten, and always in the
+# same binaries), and ThreadSanitizer has the same appetite for address space.
+# Disabling ASLR for the test run makes it deterministic; this is an environment
+# quirk, not a defect in ntplite.
+$ctest = if ($sanitizeFlag -ne 'OFF') {
   'setarch "$(uname -m)" -R ctest --test-dir build-remote --output-on-failure'
 } else {
   'ctest --test-dir build-remote --output-on-failure'
@@ -124,7 +133,8 @@ cmake -S . -B build-remote -G Ninja \
   -DCMAKE_BUILD_TYPE=$BuildType \
   -DNTP_LITE_WERROR=ON \
   -DNTP_LITE_SANITIZE=$sanitizeFlag \
-  -DNTP_LITE_ONLINE_TESTS=$onlineFlag
+  -DNTP_LITE_ONLINE_TESTS=$onlineFlag \
+  $ExtraConfigureArguments
 cmake --build build-remote --parallel
 $ctest
 "@
