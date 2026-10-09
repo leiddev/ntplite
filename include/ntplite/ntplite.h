@@ -410,6 +410,19 @@ void copy_text(char* destination, std::size_t capacity, const std::string& sourc
   destination[length] = '\0';
 }
 
+// Widens one of the two signed 8 bit exponents a server advertises (its Poll
+// interval and its clock Precision, both log2 seconds) into the `int` the C
+// struct carries.  A negative value is normal here - Precision is a fraction of
+// a second - so the sign has to survive, which is exactly what a plain
+// char -> int conversion does and exactly what bugprone-signed-char-misuse
+// exists to catch: it cannot tell an exponent from a character.  Going through
+// unsigned char says "these are arithmetic bits, not a character" and leaves one
+// reading of the value.
+int widen_exponent(std::int8_t value) {
+  const unsigned char byte = static_cast<unsigned char>(value);
+  return byte < 128 ? static_cast<int>(byte) : static_cast<int>(byte) - 256;
+}
+
 // Built from the C++ defaults, so the two faces cannot drift apart.
 ntplite_options_t default_options() {
   const ntplite::query_options source;
@@ -494,8 +507,8 @@ ntplite_result_t result_from_cxx(const ntplite::query_result& source) {
   out.leap = source.leap;
   out.version = source.version;
   out.mode = source.mode;
-  out.poll = source.poll;
-  out.precision = source.precision;
+  out.poll = widen_exponent(source.poll);
+  out.precision = widen_exponent(source.precision);
 
   return out;
 }
