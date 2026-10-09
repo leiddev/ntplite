@@ -214,6 +214,25 @@ python scripts/verify_real_servers.py --servers pool.ntp.org,time.cloudflare.com
 Both ways are safe to run on a machine whose clock matters: neither the library
 nor the script sets the system time, and the script would fail if it had been.
 
+### Building on the Linux host
+
+`scripts/remote_build.ps1` copies the tree to a Linux machine over SSH, builds it
+there and runs CTest. That is how the other half of the portability story is
+checked from a Windows desk, and it is what caught the socket bugs that only a
+BSD-derived or a 32 bit stack has:
+
+```powershell
+pwsh scripts/remote_build.ps1                           # Release, -Werror, whole suite
+pwsh scripts/remote_build.ps1 -Sanitize                 # ASan + UBSan
+pwsh scripts/remote_build.ps1 -SanitizerList thread     # TSan
+pwsh scripts/remote_build.ps1 -BuildType Debug
+pwsh scripts/remote_build.ps1 -TestFilter ntplite.unit  # one case, not five
+pwsh scripts/remote_build.ps1 -OnlineTests -TestFilter ntplite.real_servers
+```
+
+The last one is the real-server check above, run where the network is. It is the
+one invocation that needs UDP port 123 out, which is why it is opt-in there too.
+
 ---
 
 ## Design notes
