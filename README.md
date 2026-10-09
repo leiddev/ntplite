@@ -174,7 +174,7 @@ release-notes/         human written notes, one file per release
 - [x] **0** — repository scaffold, build system, CI, test framework
 - [x] **1** — NTP ↔ Unix ↔ `std::chrono` time conversion, NTP era handling
 - [x] **2** — NTPv4 packet encoding / decoding, Kiss-o'-Death handling
-- [ ] **3** — socket abstraction (Winsock2 / POSIX), timeouts, DNS
+- [x] **3** — socket abstraction (Winsock2 / POSIX), timeouts, DNS
 - [ ] **4** — client core: offset and delay estimation, retries
 - [ ] **5** — public C API, CLI tool, installable CMake package
 - [ ] **6** — in-process mock NTP server, end-to-end tests

@@ -65,12 +65,40 @@ roadmap in the README for what is left.
   defined by RFC 5905, and a printable renderer for reference identifiers.
 - `make_client_request` for building the outbound query.
 
+#### UDP transport
+
+- `ntplite::detail::error_code`, the implementation's own error taxonomy, kept
+  numerically identical to `ntplite_status_t` by `static_assert`s so the C ABI
+  mapping can never drift.
+- `ntplite::detail::endpoint`, a copyable IPv4/IPv6 address value that owns a
+  `sockaddr_storage`, renders itself as text (bracketing IPv6 once a port
+  follows) and is what the socket calls speak.
+- `resolve`, which turns a name or an IP literal into the full list of UDP
+  endpoints the resolver offers, so a client can fall through from a dead
+  address to a live one.
+- `deadline`, a `steady_clock`-based timeout so a wall-clock jump cannot turn a
+  timeout into a hang, and `sleep_ms` for retry spacing.
+- `wait_readable` / `wait_writable` over `select(2)`, retrying interrupted waits
+  against the remaining budget instead of giving up early.
+- `udp_socket`: a move-only, non-throwing socket wrapper with connect, bind,
+  non-blocking mode, address reuse and broadcast, raw send/receive, and
+  `local_endpoint` for discovering the port the kernel chose.
+- Winsock and POSIX are both supported from the same header. `WIN32_LEAN_AND_MEAN`
+  and `NOMINMAX` are applied before the first Windows header is read, and a
+  translation unit that has already included `<windows.h>` without them gets an
+  explanation instead of a screenful of redefinition errors.
+
 ### Fixed
 
 - `ntplite_status_t` now pins its underlying type to `int` when compiled as
   C++. Without it, C++ narrows the enumeration's value range to its
   enumerators and any out-of-range value arriving from C or an FFI binding is
   undefined behaviour on load. Enumerator values are now explicit and frozen.
+- The test framework's `CHECK_STREQ` now holds its operands in `std::string`
+  values instead of raw pointers. A call such as
+  `CHECK_STREQ(make_text().c_str(), "x")` used to capture a pointer into a
+  temporary that was destroyed before the comparison ran, so the assertion
+  could pass or fail depending on what the stack happened to hold.
 
 [Unreleased]: https://github.com/leiddev/ntplite/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/leiddev/ntplite/releases/tag/v0.1.0

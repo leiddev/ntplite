@@ -10,8 +10,10 @@
 # ---------------------------------------------------------------------------
 set(NTP_LITE_TEST_SOURCES
     test_main.cpp
+    test_error.cpp
     test_ntp_time.cpp
     test_packet.cpp
+    test_socket.cpp
     test_time.cpp
     test_version.cpp)
 

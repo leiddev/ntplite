@@ -155,6 +155,17 @@ inline bool string_equal(const char* a, const char* b) {
   return std::strcmp(a, b) == 0;
 }
 
+/// Copies a C string into a std::string that the caller owns.
+///
+/// CHECK_STREQ has to hold on to its operands for the duration of the
+/// assertion, and an argument such as `some_function().c_str()` - or
+/// `std::string(...).c_str()` - is a pointer *into a temporary*, which is
+/// destroyed at the end of the declaration that captures it.  Copying first
+/// is what makes the obvious spelling safe.
+inline std::string copy_string(const char* value) {
+  return value == NULL ? std::string() : std::string(value);
+}
+
 // ---------------------------------------------------------------------------
 // Case ordering: deterministic, so CI logs diff cleanly between runs.
 // ---------------------------------------------------------------------------
@@ -356,20 +367,20 @@ inline int run_all(int argc, char** argv) {
     NTP_TEST_DIAGNOSTICS_POP                                                                     \
   } while (false)
 
-#define NTP_TEST_CHECK_STREQ(a, b)                                                         \
-  do {                                                                                     \
-    NTP_TEST_DIAGNOSTICS_PUSH                                                              \
-    NTP_TEST_DIAGNOSTICS_SUPPRESS_CONSTANT_CONDITION                                       \
-    ++::ntplite_test::total_checks();                                                      \
-    const char* ntplite_test_lhs = (a);                                                    \
-    const char* ntplite_test_rhs = (b);                                                    \
-    if (!::ntplite_test::string_equal(ntplite_test_lhs, ntplite_test_rhs)) {               \
-      ::ntplite_test::report_failure(__FILE__, __LINE__,                                   \
-                                     std::string("CHECK_STREQ(" #a ", " #b ") failed: ") + \
-                                         ::ntplite_test::repr(ntplite_test_lhs) +          \
-                                         " != " + ::ntplite_test::repr(ntplite_test_rhs)); \
-    }                                                                                      \
-    NTP_TEST_DIAGNOSTICS_POP                                                               \
+#define NTP_TEST_CHECK_STREQ(a, b)                                                                 \
+  do {                                                                                             \
+    NTP_TEST_DIAGNOSTICS_PUSH                                                                      \
+    NTP_TEST_DIAGNOSTICS_SUPPRESS_CONSTANT_CONDITION                                               \
+    ++::ntplite_test::total_checks();                                                              \
+    const std::string ntplite_test_lhs = ::ntplite_test::copy_string(a);                           \
+    const std::string ntplite_test_rhs = ::ntplite_test::copy_string(b);                           \
+    if (!::ntplite_test::string_equal(ntplite_test_lhs.c_str(), ntplite_test_rhs.c_str())) {       \
+      ::ntplite_test::report_failure(__FILE__, __LINE__,                                           \
+                                     std::string("CHECK_STREQ(" #a ", " #b ") failed: ") +         \
+                                         ::ntplite_test::repr(ntplite_test_lhs.c_str()) +          \
+                                         " != " + ::ntplite_test::repr(ntplite_test_rhs.c_str())); \
+    }                                                                                              \
+    NTP_TEST_DIAGNOSTICS_POP                                                                       \
   } while (false)
 
 /// Records an unconditional failure.  Handy as the `else` branch of a manual
