@@ -29,9 +29,11 @@ option(NTP_LITE_ONLINE_TESTS
        OFF)
 
 option(NTP_LITE_WERROR "Treat compiler warnings as errors" OFF)
-option(NTP_LITE_SANITIZE
-       "Build with AddressSanitizer + UndefinedBehaviorSanitizer (GCC/Clang only)"
-       OFF)
+set(NTP_LITE_SANITIZE
+    OFF
+    CACHE STRING
+          "Sanitizers to build with (GCC/Clang only): OFF, ON for address+undefined, or a list such as thread"
+)
 
 # ---------------------------------------------------------------------------
 # Defaults for single-configuration generators
@@ -114,14 +116,36 @@ endfunction()
 
 # ---------------------------------------------------------------------------
 # Sanitizers (test / CI builds only)
+#
+# The value is a list of sanitizers, so a job can ask for -fsanitize=thread
+# without a second switch.  The bare on/off spelling is kept because it is what
+# the documentation and most invocations use, and it means the pair that catches
+# the most per unit of build time.
 # ---------------------------------------------------------------------------
-if(NTP_LITE_SANITIZE)
+string(TOUPPER "${NTP_LITE_SANITIZE}" ntplite_sanitize_upper)
+set(ntplite_sanitizers "OFF")
+
+if(NOT ntplite_sanitize_upper MATCHES "^(OFF|FALSE|NO|0)?$")
   if(MSVC)
     message(WARNING "NTP_LITE_SANITIZE is not supported with MSVC; ignoring.")
   else()
-    add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer
+    if(ntplite_sanitize_upper MATCHES "^(ON|TRUE|YES|1)$")
+      set(ntplite_sanitizers "address,undefined")
+    else()
+      set(ntplite_sanitizers "${NTP_LITE_SANITIZE}")
+    endif()
+
+    if(ntplite_sanitizers MATCHES "thread" AND ntplite_sanitizers MATCHES "address")
+      message(
+        FATAL_ERROR
+          "NTP_LITE_SANITIZE cannot combine thread with address: the run time "
+          "libraries are mutually exclusive.")
+    endif()
+
+    message(STATUS "Building with -fsanitize=${ntplite_sanitizers}")
+    add_compile_options(-fsanitize=${ntplite_sanitizers} -fno-omit-frame-pointer
                         -fno-sanitize-recover=all)
-    add_link_options(-fsanitize=address,undefined)
+    add_link_options(-fsanitize=${ntplite_sanitizers})
   endif()
 endif()
 
@@ -239,5 +263,5 @@ message(STATUS "  build type ......... ${CMAKE_BUILD_TYPE}")
 message(STATUS "  tools/examples/tests ${NTP_LITE_BUILD_TOOLS}/${NTP_LITE_BUILD_EXAMPLES}/${NTP_LITE_BUILD_TESTS}")
 message(STATUS "  online tests ....... ${NTP_LITE_ONLINE_TESTS}")
 message(STATUS "  warnings as errors . ${NTP_LITE_WERROR}")
-message(STATUS "  sanitizers ......... ${NTP_LITE_SANITIZE}")
+message(STATUS "  sanitizers ......... ${ntplite_sanitizers}")
 message(STATUS "")

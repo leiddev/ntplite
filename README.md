@@ -173,7 +173,7 @@ cmake --preset unix-sanitize      # Ninja + ASan/UBSan
 | `NTP_LITE_BUILD_TESTS` | `ON` | Build the test suite |
 | `NTP_LITE_ONLINE_TESTS` | `OFF` | Register tests that need real internet access |
 | `NTP_LITE_WERROR` | `OFF` | Treat compiler warnings as errors |
-| `NTP_LITE_SANITIZE` | `OFF` | Build with ASan + UBSan (GCC/Clang only) |
+| `NTP_LITE_SANITIZE` | `OFF` | Sanitizers to build with: `ON` for ASan + UBSan, or a list such as `thread` (GCC/Clang only) |
 | `NTP_LITE_INSTALL` | `ON` | Generate install / packaging rules |
 
 ### Tooling scripts
@@ -231,7 +231,38 @@ tests/                 dependency-free test framework, mock server, consumers
 scripts/               developer / CI helper scripts (Python)
 cmake/                 package configuration templates
 release-notes/         human written notes, one file per release
+.clang-format          formatting, gated on every push (clang-format 19.1.7)
+.clang-tidy            the static analysis check list, gated on every push
 ```
+
+---
+
+## Continuous integration
+
+Every push to `main` and every pull request runs `.github/workflows/ci.yml`,
+with the same deterministic tests described under [Design
+notes](#design-notes). Nothing reaches out to the internet.
+
+| Job | What it covers |
+| --- | --- |
+| `linux` | GCC and Clang, Debug and Release, on Ubuntu 22.04 |
+| `linux-32-bit` | the same suite where pointers, `size_t` and `long` are half the width |
+| `macos` | AppleClang, Debug and Release |
+| `windows` | MSVC (Visual Studio 2022), Debug and Release |
+| `sanitizers` | AddressSanitizer + UndefinedBehaviorSanitizer, and ThreadSanitizer |
+| `clang-tidy` | the static analyser and the bug-prone idioms, over the library |
+| `cppcheck` | a second opinion from a different analyser, over the library |
+| `format` | clang-format 19.1.7, pinned so a runner upgrade cannot fail the build |
+| `hygiene` | the version is declared identically everywhere |
+| `coverage` | a gcovr report, uploaded as an artifact (reported, never enforced) |
+| `package` | `cmake --install` into a scratch prefix, consumed by `find_package()` |
+
+The two analysers run over the library only: `src/ntplite_c.cpp` plus the
+generated "header hygiene" translation unit for each public header, one header at
+a time. That is exactly the code a consumer compiles, in the smallest units that
+compile it, which keeps the run quick and keeps every finding where it can be
+acted on. The tests, tools and examples are covered by the compiler, the
+sanitizers and the test suite itself.
 
 ---
 
@@ -244,7 +275,7 @@ release-notes/         human written notes, one file per release
 - [x] **4** — client core: offset and delay estimation, retries
 - [x] **5** — public C API, CLI tool, installable CMake package
 - [x] **6** — in-process mock NTP server, end-to-end tests, Python cross-validation
-- [ ] **7** — full CI matrix, sanitizers, static analysis
+- [x] **7** — full CI matrix, sanitizers, static analysis
 - [ ] **8** — verified on a real Linux host over SSH
 
 See [CHANGELOG.md](CHANGELOG.md) for what has actually landed.
