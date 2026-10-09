@@ -182,7 +182,15 @@ cmake --preset unix-sanitize      # Ninja + ASan/UBSan
 python scripts/format.py --check         # clang-format gate (same script CI runs)
 python scripts/format.py                 # reformat in place
 python scripts/check_version_sync.py     # version consistency across the tree
+python scripts/cross_validate_ntp.py     # the tool, against a second NTP implementation
 ```
+
+`cross_validate_ntp.py` builds an NTP server out of `struct` and arithmetic of
+its own, then drives the compiled `ntplite` tool against it and checks what comes
+back. The C++ tests use a mock server that shares the library's packet codec, so
+a shared misreading of RFC 5905 would be invisible there; this script is the
+check that it is not. It needs the tool to be built, and is registered with CTest
+as `ntplite.cross_validation`.
 
 ---
 
@@ -200,8 +208,12 @@ python scripts/check_version_sync.py     # version consistency across the tree
   mistake here fails the build rather than a user's link.
 
 * **Deterministic tests.**
-  Behaviour that needs a network is tested over real loopback sockets against a
-  peer the test itself drives, so CI never depends on the public internet. A
+  Behaviour that needs a network is tested over real loopback sockets against
+  `tests/mock_ntp_server.hpp`, a threaded NTP server the test itself drives, so
+  CI never depends on the public internet. The mock shares the library's packet
+  codec, which is a real weakness: `scripts/cross_validate_ntp.py` therefore
+  speaks the same protocol with an implementation of its own and checks the
+  compiled tool against that, so the two cannot be wrong in the same way. A
   query that is meant to fail is aimed at an address RFC 5737 reserves for
   documentation, which can never be a real host. Tests that do reach out to real
   servers are opt-in via `NTP_LITE_ONLINE_TESTS`.
@@ -231,7 +243,7 @@ release-notes/         human written notes, one file per release
 - [x] **3** — socket abstraction (Winsock2 / POSIX), timeouts, DNS
 - [x] **4** — client core: offset and delay estimation, retries
 - [x] **5** — public C API, CLI tool, installable CMake package
-- [ ] **6** — in-process mock NTP server, end-to-end tests
+- [x] **6** — in-process mock NTP server, end-to-end tests, Python cross-validation
 - [ ] **7** — full CI matrix, sanitizers, static analysis
 - [ ] **8** — verified on a real Linux host over SSH
 

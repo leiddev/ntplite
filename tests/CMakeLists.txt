@@ -13,6 +13,7 @@ set(NTP_LITE_TEST_SOURCES
     test_civil_time.cpp
     test_client.cpp
     test_clock.cpp
+    test_end_to_end.cpp
     test_error.cpp
     test_ntp_time.cpp
     test_packet.cpp
@@ -107,3 +108,24 @@ ntplite_apply_c_warnings(ntplite_c_consumer)
 
 add_test(NAME ntplite.c_consumer COMMAND ntplite_c_consumer)
 set_tests_properties(ntplite.c_consumer PROPERTIES TIMEOUT 60)
+
+# ---------------------------------------------------------------------------
+# Cross-validation: a second implementation of the protocol, in Python, drives
+# the compiled command line tool.  The mock server the C++ tests use is built on
+# the library's own packet codec, so this is the check that a shared misreading
+# of RFC 5905 cannot hide.  It is skipped, rather than failed, when the tool is
+# not being built or no Python 3 interpreter is available.
+# ---------------------------------------------------------------------------
+if(NTP_LITE_BUILD_TOOLS AND TARGET ntplite_cli)
+  find_package(Python3 COMPONENTS Interpreter QUIET)
+  if(Python3_Interpreter_FOUND)
+    add_test(
+      NAME ntplite.cross_validation
+      COMMAND "${Python3_EXECUTABLE}"
+              "${PROJECT_SOURCE_DIR}/scripts/cross_validate_ntp.py"
+              --tool "$<TARGET_FILE:ntplite_cli>")
+    set_tests_properties(ntplite.cross_validation PROPERTIES TIMEOUT 120)
+  else()
+    message(STATUS "Python 3 not found: the cross-validation test will not be registered")
+  endif()
+endif()

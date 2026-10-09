@@ -47,6 +47,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ninja-build
 
+      # The cross-validation test (ntplite.cross_validation) drives the built
+      # tool from Python, so the interpreter is pinned rather than assumed.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Show toolchain versions
         env:
           CC: ${{ matrix.compiler }}
@@ -54,6 +60,7 @@ jobs:
         run: |
           ${CXX} --version | head -n 1
           cmake --version | head -n 1
+          python3 --version
 
       - name: Configure
         env:
@@ -89,6 +96,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ninja-build
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Configure
         run: >
           cmake -S . -B build -G Ninja
@@ -117,6 +128,10 @@ jobs:
         build_type: [Debug, Release]
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
       - name: Configure
         run: >

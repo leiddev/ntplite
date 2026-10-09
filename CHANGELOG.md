@@ -171,6 +171,28 @@ README for what is left.
   easy to read the wrong way round and knowing which clock is ahead is the whole
   point.
 
+#### Tests that talk to a real socket
+
+- `tests/mock_ntp_server.hpp`, a threaded NTP server on loopback, so the client
+  can be driven end to end instead of through its own building blocks. It can
+  answer, stay silent, truncate, send noise, duplicate its reply, refuse with a
+  Kiss-o'-Death, shift its clock, or claim to have held the request far longer
+  than the exchange took; and it counts what it was asked.
+- End-to-end cases covering the whole path, from resolving a name to reading the
+  report: a normal answer, an offset in both directions, a retry answered on the
+  second attempt, a refusal that is not retried, an unusable answer that ends the
+  exchange, a truncated datagram and noise that are both discarded and retried,
+  a duplicate that is accepted exactly once, a silent server that times out with
+  the expected attempt count, and a server whose invented processing time makes
+  the delay impossible.
+- `scripts/cross_validate_ntp.py`, the one check that shares no code with the
+  library. It builds an NTP server out of `struct` and arithmetic of its own,
+  drives the compiled tool against it, and checks both the datagrams the client
+  sent and the numbers it reported - including that a reply from the wrong port,
+  and a reply that does not echo the request, are both ignored. Registered with
+  CTest as `ntplite.cross_validation`, and skipped when the tool is not built or
+  no Python 3 interpreter is available.
+
 ### Changed
 
 - Reference identifiers are no longer padded. `reference_id_text` used to render
