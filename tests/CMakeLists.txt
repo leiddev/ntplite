@@ -10,6 +10,8 @@
 # ---------------------------------------------------------------------------
 set(NTP_LITE_TEST_SOURCES
     test_main.cpp
+    test_ntp_time.cpp
+    test_time.cpp
     test_version.cpp)
 
 add_executable(ntplite_tests ${NTP_LITE_TEST_SOURCES})

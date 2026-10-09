@@ -15,6 +15,8 @@
 #define NTP_LITE_NTP_LITE_HPP
 
 #include <ntplite/detail/config.hpp>
+#include <ntplite/detail/ntp_time.hpp>
+#include <ntplite/time.hpp>
 #include <ntplite/version.hpp>
 
 namespace ntplite {

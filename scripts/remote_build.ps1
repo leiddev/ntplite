@@ -103,6 +103,17 @@ $onlineFlag = if ($OnlineTests) { 'ON' } else { 'OFF' }
 
 $clean = if ($KeepBuildDirectory) { '' } else { 'rm -rf build-remote;' }
 
+# AddressSanitizer needs a predictable address space.  gcc-11's libasan on
+# kernel 6.8 intermittently dies with "AddressSanitizer:DEADLYSIGNAL" when
+# ASLR is left at its default entropy (observed at roughly one run in ten, and
+# always in the same binaries).  Disabling ASLR for the test run makes it
+# deterministic; this is an environment quirk, not a defect in ntplite.
+$ctest = if ($Sanitize) {
+  'setarch "$(uname -m)" -R ctest --test-dir build-remote --output-on-failure'
+} else {
+  'ctest --test-dir build-remote --output-on-failure'
+}
+
 Write-Step 'Configure / build / test'
 
 $remoteScript = @"
@@ -115,7 +126,7 @@ cmake -S . -B build-remote -G Ninja \
   -DNTP_LITE_SANITIZE=$sanitizeFlag \
   -DNTP_LITE_ONLINE_TESTS=$onlineFlag
 cmake --build build-remote --parallel
-ctest --test-dir build-remote --output-on-failure
+$ctest
 "@
 
 Invoke-Remote $remoteScript
