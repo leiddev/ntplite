@@ -1,0 +1,101 @@
+# ============================================================================
+# ntplite - .gitignore
+# ============================================================================
+
+# ---- Build / install output ------------------------------------------------
+build/
+build-*/
+cmake-build-*/
+out/
+install/
+dist/
+_deps/
+Testing/
+install_manifest.txt
+compile_commands.json
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+*.cmake.stamp
+.cache/
+.clangd/
+
+# ---- Compiled objects & binaries -------------------------------------------
+*.o
+*.obj
+*.lo
+*.a
+*.lib
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+*.pdb
+*.ilk
+*.exp
+*.idb
+*.out
+*.app
+
+# ---- Visual Studio ---------------------------------------------------------
+.vs/
+*.vcxproj
+*.vcxproj.*
+*.sln
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.props
+*.targets
+ipch/
+*.opendb
+*.VC.db
+
+# ---- Other IDEs ------------------------------------------------------------
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+.idea/
+*.iml
+*.kdev4
+.kdev4/
+.cproject
+.project
+.settings/
+*.swp
+*.swo
+*~
+
+# ---- Python ----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- OS noise --------------------------------------------------------------
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ---- Editors / misc --------------------------------------------------------
+*.log
+*.tmp
+*.bak
+*.orig
+*.rej
+tags
+TAGS
+*.gcda
+*.gcno
+*.gcov

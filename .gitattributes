@@ -1,0 +1,68 @@
+# ============================================================================
+# ntplite - .gitattributes
+# ============================================================================
+# Normalize all text files to LF in the repository so that Windows and Linux
+# checkouts produce identical bytes (this keeps clang-format checks, CI
+# tarballs and release archives byte-stable).
+
+* text=auto eol=lf
+
+# ---- Explicitly textual ----------------------------------------------------
+*.c        text eol=lf
+*.cc       text eol=lf
+*.cpp      text eol=lf
+*.cxx      text eol=lf
+*.h        text eol=lf
+*.hh       text eol=lf
+*.hpp      text eol=lf
+*.hxx      text eol=lf
+*.inc      text eol=lf
+*.in       text eol=lf
+*.cmake    text eol=lf
+CMakeLists.txt text eol=lf
+*.md       text eol=lf
+*.json     text eol=lf
+*.yml      text eol=lf
+*.yaml     text eol=lf
+*.py       text eol=lf
+*.sh       text eol=lf
+*.ps1      text eol=lf
+*.txt      text eol=lf
+LICENSE    text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
+.clang-format text eol=lf
+.editorconfig text eol=lf
+
+# Windows batch files must keep CRLF to be safely executable by cmd.exe.
+*.bat      text eol=crlf
+*.cmd      text eol=crlf
+
+# ---- Binary ----------------------------------------------------------------
+*.png      binary
+*.jpg      binary
+*.jpeg     binary
+*.gif      binary
+*.ico      binary
+*.pdf      binary
+*.zip      binary
+*.tar      binary
+*.gz       binary
+*.tgz      binary
+*.7z       binary
+
+# ---- Diffs -----------------------------------------------------------------
+# Generated artefacts are not worth cluttering diffs / language stats.
+CMakePresets.json  linguist-language=JSON
+*.md               linguist-documentation
+release-notes/**   linguist-documentation
+
+# ---- Archival --------------------------------------------------------------
+# Keep developer-only files out of `git archive` / GitHub tarballs.
+.github/           export-ignore
+tests/             export-ignore
+scripts/           export-ignore
+.clang-format      export-ignore
+.editorconfig      export-ignore
+.gitattributes     export-ignore
+.gitignore         export-ignore

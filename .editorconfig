@@ -1,0 +1,56 @@
+# ============================================================================
+# ntplite - .editorconfig
+# Keep this file consistent with .clang-format.
+# ============================================================================
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+max_line_length = 100
+
+# ---- C / C++ ---------------------------------------------------------------
+[*.{c,cc,cpp,cxx,h,hh,hpp,hxx,inc}]
+indent_size = 2
+indent_style = space
+max_line_length = 100
+
+# ---- Build system ----------------------------------------------------------
+[{CMakeLists.txt,*.cmake,*.cmake.in}]
+indent_size = 2
+
+[*.json]
+indent_size = 2
+
+# ---- Docs: trailing whitespace is sometimes intentional (markdown breaks) --
+[*.{md,markdown}]
+trim_trailing_whitespace = false
+max_line_length = off
+
+# ---- Scripting -------------------------------------------------------------
+[*.py]
+indent_size = 4
+max_line_length = 100
+
+[*.{ps1,psm1}]
+indent_size = 4
+end_of_line = crlf
+max_line_length = off
+
+[*.{sh,bash}]
+indent_size = 2
+
+# ---- Files that genuinely require tabs / CRLF ------------------------------
+[{Makefile,makefile,GNUmakefile}]
+indent_style = tab
+
+[*.{bat,cmd}]
+end_of_line = crlf
+
+# ---- Never touch generated or vendored content -----------------------------
+[LICENSE]
+insert_final_newline = true

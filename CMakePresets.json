@@ -1,0 +1,143 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "NTP_LITE_BUILD_TOOLS": "ON",
+        "NTP_LITE_BUILD_EXAMPLES": "ON",
+        "NTP_LITE_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "windows-vs2022",
+      "displayName": "Windows / Visual Studio 2022 (x64)",
+      "description": "Local Windows development preset. Matches the machine's VS2022 toolchain.",
+      "inherits": "base",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "cacheVariables": {
+        "NTP_LITE_WERROR": "ON"
+      }
+    },
+    {
+      "name": "windows-vs2022-debug",
+      "displayName": "Windows / VS2022 Debug (x64)",
+      "inherits": "windows-vs2022",
+      "cacheVariables": {
+        "CMAKE_CONFIGURATION_TYPES": "Debug"
+      }
+    },
+    {
+      "name": "unix-debug",
+      "displayName": "Unix / Ninja Debug",
+      "inherits": "base",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "NTP_LITE_WERROR": "ON"
+      }
+    },
+    {
+      "name": "unix-release",
+      "displayName": "Unix / Ninja Release",
+      "inherits": "base",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "NTP_LITE_WERROR": "ON"
+      }
+    },
+    {
+      "name": "unix-sanitize",
+      "displayName": "Unix / Ninja Debug + ASan/UBSan",
+      "inherits": "base",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "NTP_LITE_WERROR": "ON",
+        "NTP_LITE_SANITIZE": "ON",
+        "NTP_LITE_ONLINE_TESTS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "windows-vs2022",
+      "configurePreset": "windows-vs2022",
+      "configuration": "Debug"
+    },
+    {
+      "name": "windows-vs2022-debug",
+      "configurePreset": "windows-vs2022-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "unix-debug",
+      "configurePreset": "unix-debug"
+    },
+    {
+      "name": "unix-release",
+      "configurePreset": "unix-release"
+    },
+    {
+      "name": "unix-sanitize",
+      "configurePreset": "unix-sanitize"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "windows-vs2022",
+      "configurePreset": "windows-vs2022",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error",
+        "stopOnFailure": false
+      }
+    },
+    {
+      "name": "unix-debug",
+      "configurePreset": "unix-debug",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error",
+        "stopOnFailure": false
+      }
+    },
+    {
+      "name": "unix-release",
+      "configurePreset": "unix-release",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error",
+        "stopOnFailure": false
+      }
+    },
+    {
+      "name": "unix-sanitize",
+      "configurePreset": "unix-sanitize",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error",
+        "stopOnFailure": false
+      }
+    }
+  ]
+}

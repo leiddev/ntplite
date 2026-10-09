@@ -1,0 +1,93 @@
+# ============================================================================
+# ntplite - .github/workflows/release.yml
+# ----------------------------------------------------------------------------
+# Publishing a release:
+#
+#   1. write release-notes/v<version>.md
+#   2. bump the version in CMakeLists.txt, include/ntplite/version.hpp and
+#      CHANGELOG.md, commit
+#   3. git tag v<version> && git push origin v<version>
+#
+# This workflow then verifies that the tag, the sources and the release notes
+# all agree before anything is published.
+# ============================================================================
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)publish, e.g. v0.1.0"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: build artefacts and publish
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ninja-build
+
+      - name: Resolve the tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "name=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify the tag matches the declared version
+        run: |
+          python scripts/check_version_sync.py
+          python scripts/check_version_sync.py --tag "${{ steps.tag.outputs.name }}"
+
+      - name: Verify the release notes exist
+        run: |
+          notes="release-notes/${{ steps.tag.outputs.name }}.md"
+          if [ ! -f "$notes" ]; then
+            echo "::error::$notes is missing - every release needs notes."
+            exit 1
+          fi
+
+      - name: Build and test
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DNTP_LITE_WERROR=ON
+          cmake --build build --parallel
+          ctest --test-dir build --output-on-failure
+
+      - name: Create source archives
+        run: |
+          mkdir -p dist
+          name="ntplite-${{ steps.tag.outputs.name }}"
+          git archive --format=tar.gz --prefix="${name}/" \
+            -o "dist/${name}.tar.gz" "${{ steps.tag.outputs.name }}"
+          git archive --format=zip --prefix="${name}/" \
+            -o "dist/${name}.zip" "${{ steps.tag.outputs.name }}"
+          ls -l dist
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.tag.outputs.name }}" \
+            --title "ntplite ${{ steps.tag.outputs.name }}" \
+            --notes-file "release-notes/${{ steps.tag.outputs.name }}.md" \
+            dist/*.tar.gz dist/*.zip

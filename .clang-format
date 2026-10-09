@@ -1,0 +1,75 @@
+# ============================================================================
+# ntplite - clang-format configuration
+# ----------------------------------------------------------------------------
+# Baseline: Google (2-space indent, 100 column limit is our only deviation).
+#
+# IMPORTANT: every option used here must be understood by clang-format >= 14
+# so that a single config serves both the development machines and the CI
+# runner.  CI pins `clang-format==19.1.7` via pip (see
+# .github/workflows/ci.yml) -- keep newly added options compatible with 14.x
+# and bump the CI pin deliberately when you use newer options.
+# ============================================================================
+---
+Language:        Cpp
+BasedOnStyle:    Google
+Standard:        c++11
+
+# ---- Layout ----------------------------------------------------------------
+IndentWidth:              2
+TabWidth:                 2
+UseTab:                   Never
+ColumnLimit:              100
+ContinuationIndentWidth:  4
+AccessModifierOffset:     -1
+
+# ---- Braces ----------------------------------------------------------------
+BreakBeforeBraces:        Attach
+BraceWrapping:
+  AfterClass:             false
+  AfterControlStatement:  false
+  AfterEnum:              false
+  AfterFunction:          false
+  AfterNamespace:         false
+  AfterStruct:            false
+  AfterUnion:             false
+  BeforeCatch:            false
+  BeforeElse:             false
+  IndentBraces:           false
+
+# ---- Alignment -------------------------------------------------------------
+AlignAfterOpenBracket:    Align
+AlignOperands:            true
+AlignConsecutiveMacros:   true
+AlignTrailingComments:    true
+DerivePointerAlignment:   false
+PointerAlignment:         Left
+ReferenceAlignment:       Pointer
+
+# ---- Line breaking ---------------------------------------------------------
+AllowShortBlocksOnASingleLine:        Never
+AllowShortCaseLabelsOnASingleLine:    false
+AllowShortFunctionsOnASingleLine:     Inline
+AllowShortIfStatementsOnASingleLine:  Never
+AllowShortLoopsOnASingleLine:         false
+AlwaysBreakTemplateDeclarations:      Yes
+BinPackArguments:                     true
+BinPackParameters:                    true
+PenaltyReturnTypeOnItsOwnLine:        200
+PenaltyBreakBeforeFirstCallParameter: 30
+
+# ---- Includes --------------------------------------------------------------
+SortIncludes:             true
+IncludeBlocks:            Regroup
+
+# ---- Comments & strings ----------------------------------------------------
+ReflowComments:           true
+SpacesBeforeTrailingComments: 2
+
+# ---- Misc ------------------------------------------------------------------
+FixNamespaceComments:     true
+SortUsingDeclarations:    false
+SpaceAfterCStyleCast:     false
+SpaceBeforeParens:        ControlStatements
+SpacesInAngles:           Never
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep:      1
