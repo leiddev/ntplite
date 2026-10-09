@@ -567,7 +567,9 @@ NTP_TEST(socket, a_datagram_on_a_connected_socket) {
   error_code ec = error_code::ok;
   udp_socket client;
   NTP_TEST_REQUIRE(client.open(address_family::ipv4, ec));
+  NTP_TEST_CHECK(!client.is_connected());
   NTP_TEST_REQUIRE(client.connect(server_address, ec));
+  NTP_TEST_CHECK(client.is_connected());
 
   const char payload[] = {'N', 'T', 'P', '\0'};
   NTP_TEST_CHECK(client.send(payload, sizeof(payload), ec));
@@ -582,6 +584,40 @@ NTP_TEST(socket, a_datagram_on_a_connected_socket) {
   NTP_TEST_CHECK_ERROR(ec, error_code::ok);
   NTP_TEST_CHECK_EQ(received, sizeof(payload));
   NTP_TEST_CHECK(std::memcmp(buffer, payload, sizeof(payload)) == 0);
+}
+
+NTP_TEST(socket, send_to_on_a_connected_socket_still_sends) {
+  udp_socket server;
+  endpoint server_address;
+  NTP_TEST_REQUIRE(make_bound_loopback_socket(address_family::ipv4, server, server_address));
+
+  error_code ec = error_code::ok;
+  udp_socket client;
+  NTP_TEST_REQUIRE(client.open(address_family::ipv4, ec));
+  NTP_TEST_REQUIRE(client.connect(server_address, ec));
+  NTP_TEST_CHECK(client.is_connected());
+
+  // The address is redundant now that the kernel holds the peer, and on the
+  // BSD-derived stacks it is worse than redundant: sendto() rejects it with
+  // EISCONN and the datagram never leaves the process.  Linux and Winsock both
+  // accept the address, so only a Mac reports this one.
+  const char payload[] = {'E', 'I', 'S', 'C', 'O', 'N', 'N', '\0'};
+  NTP_TEST_CHECK(client.send_to(server_address, payload, sizeof(payload), ec));
+  NTP_TEST_CHECK_ERROR(ec, error_code::ok);
+
+  NTP_TEST_CHECK(ntplite::detail::wait_readable(server.handle(), 5000, ec) == wait_result::ready);
+
+  char buffer[64];
+  std::memset(buffer, 0, sizeof(buffer));
+  std::size_t received = 0;
+  endpoint from;
+  NTP_TEST_CHECK(server.receive_from(buffer, sizeof(buffer), received, from, ec));
+  NTP_TEST_CHECK_ERROR(ec, error_code::ok);
+  NTP_TEST_CHECK_EQ(received, sizeof(payload));
+  NTP_TEST_CHECK(std::memcmp(buffer, payload, sizeof(payload)) == 0);
+
+  client.close();
+  NTP_TEST_CHECK(!client.is_connected());
 }
 
 NTP_TEST(socket, a_fresh_socket_is_writable) {

@@ -264,6 +264,12 @@ compile it, which keeps the run quick and keeps every finding where it can be
 acted on. The tests, tools and examples are covered by the compiler, the
 sanitizers and the test suite itself.
 
+The matrix earns its keep. The `macos` row is the only one that runs a
+BSD-derived socket stack, and the first time it ran it caught `send_to()` handing
+a destination address to a socket that already had a peer: Linux and Winsock
+accept that, macOS fails it with `EISCONN`, and every query had been dying as a
+network error a line before its first datagram.
+
 ---
 
 ## Roadmap
