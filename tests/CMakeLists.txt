@@ -10,6 +10,7 @@
 # ---------------------------------------------------------------------------
 set(NTP_LITE_TEST_SOURCES
     test_main.cpp
+    test_civil_time.cpp
     test_client.cpp
     test_clock.cpp
     test_error.cpp

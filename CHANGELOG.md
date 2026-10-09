@@ -126,6 +126,51 @@ README for what is left.
 - The result object is cleared before every query, so a caller that reuses one
   can never read a field left over from a previous answer.
 
+#### Public C API
+
+- `ntplite_query()`, the whole client behind one flat `extern "C"` call, with
+  `ntplite_options_t` for the port, IP version, protocol version and timeouts and
+  `ntplite_result_t` for the four timestamps, the offset, the delay, the server's
+  stratum and reference identifier, and its own root delay and dispersion.
+- `ntplite_options_init()` and `ntplite_result_init()`. A zero field means "use
+  the default", so a zero-initialised options struct is already valid and the init
+  function is a convenience rather than a requirement.
+- Every result struct carries `struct_size`, the forward compatibility seam. It
+  lets a later release add fields without breaking a caller compiled against this
+  header: the library writes only the prefix the caller says it has, and leaves
+  the caller's own `struct_size` alone.
+- `ntplite_format_utc()` and `ntplite_format_seconds()`, so a C caller can print
+  a time without borrowing the calendar arithmetic.
+- A refused argument is rejected before any IO, and a failed call hands back a
+  cleared result, so a caller that reuses one result object can never read a
+  previous answer out of it.
+
+#### Printing a time
+
+- `format_utc()` and `format_signed_seconds()` render an instant as ISO 8601 UTC
+  and a duration as seconds with a sign and nine decimals.
+- The calendar arithmetic is done in the library rather than through `gmtime()`,
+  which is not thread safe, is deprecated by MSVC, and - through a 32 bit
+  `time_t` - cannot describe the far side of the era boundary NTP is heading
+  for. A timestamp in 2100 formats correctly here and would not there.
+- A negative duration is printed by borrowing back the second its floored whole
+  part holds: `-0.5 s` is stored as `{-1, 500000000}`, and printing the two
+  fields as they stand would produce a different half second.
+
+#### Command line tool
+
+- `ntplite` queries a server and reports its time, this machine's offset from it,
+  the delay, and the server's stratum and reference identifier. It is written
+  against the C API on purpose, so building it is itself a check that the C ABI
+  is complete enough to write a program with.
+- `--json` prints the whole result as one object on one line, with the status
+  first, for a script to parse. `-q` and `-o` print just the time or just the
+  offset. Exit codes distinguish a bad command line (2) from a query that failed
+  (1).
+- The offset is printed with its sign *and* in words, because a signed number is
+  easy to read the wrong way round and knowing which clock is ahead is the whole
+  point.
+
 ### Changed
 
 - Reference identifiers are no longer padded. `reference_id_text` used to render

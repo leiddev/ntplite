@@ -264,6 +264,14 @@ inline error_code query(const char* host, query_result& out, const query_options
   if (options.version != detail::version_3 && options.version != detail::version_4) {
     return error_code::invalid_argument;
   }
+  // ip_version has a fixed underlying type, so a value that was never one of the
+  // three is well defined but meaningless.  Rejecting it here rather than
+  // quietly resolving over any family keeps a cast-from-int bug from turning
+  // into a puzzling answer.
+  if (options.ip != ip_version::any && options.ip != ip_version::ipv4 &&
+      options.ip != ip_version::ipv6) {
+    return error_code::invalid_argument;
+  }
   if (options.server_timeout_ms <= 0 || options.total_timeout_ms <= 0 ||
       options.retry_interval_ms < 0) {
     return error_code::invalid_argument;

@@ -55,15 +55,24 @@ int main() {
 #include <stdio.h>
 
 int main(void) {
-  ntplite_time_t now;
-  ntplite_status_t status = ntplite_query("pool.ntp.org", 3000, &now);
+  ntplite_result_t result;
+  ntplite_result_init(&result);
+
+  /* NULL options means the defaults; pass ntplite_options_init() to change them. */
+  const ntplite_status_t status = ntplite_query("pool.ntp.org", NULL, &result);
 
   if (status != NTP_LITE_OK) {
     fprintf(stderr, "query failed: %s\n", ntplite_status_string(status));
     return 1;
   }
 
-  printf("unix time: %lld s\n", (long long)now.unix_seconds);
+  char when[NTPLITE_TIME_TEXT_SIZE];
+  char offset[NTPLITE_SECONDS_TEXT_SIZE];
+  ntplite_format_utc(&result.server_time, when, sizeof(when));
+  ntplite_format_seconds(&result.offset, offset, sizeof(offset));
+
+  printf("the time is %s\n", when);
+  printf("this machine's clock is %s s from it\n", offset);
   return 0;
 }
 ```
@@ -103,6 +112,39 @@ On Windows, link `ws2_32`.
 
 > Do not combine A/B with linking `ntplite::c` — you would define every symbol
 > twice. Pick one route.
+
+---
+
+## The command line tool
+
+`ntplite` is the same client as a program. It reports what a server says the
+time is and how far this machine's clock is from it, and it never touches the
+local clock.
+
+```
+$ ntplite
+server    pool.ntp.org -> 162.159.200.1:123
+time      2026-10-09T12:34:56.789012345Z
+offset    -2.550000000 s (the local clock is ahead)
+delay     +0.175768440 s (the server itself took +0.153325080 s)
+stratum   3, reference 10.140.8.4
+protocol  NTPv4, 1 request
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-4`, `-6` | resolve IPv4 / IPv6 addresses only |
+| `-p`, `--port N` | server port (default 123) |
+| `--ntp-version N` | speak NTPv3 or NTPv4 (default 4) |
+| `-t`, `--timeout MS` | budget for one server (default 1000) |
+| `-T`, `--total-timeout MS` | budget for the whole query (default 5000) |
+| `--retry-interval MS` | wait before resending to a silent server (default 400) |
+| `-q`, `--quiet` | print only the server's time, ISO 8601 UTC |
+| `-o`, `--offset` | print only the offset, in seconds |
+| `--json` | print the whole result as one JSON object |
+
+Exit codes are `0` success, `1` the query failed, `2` the command line was wrong,
+so a script can tell a bad invocation from a server that did not answer.
 
 ---
 
@@ -158,9 +200,11 @@ python scripts/check_version_sync.py     # version consistency across the tree
   mistake here fails the build rather than a user's link.
 
 * **Deterministic tests.**
-  Network-dependent behaviour is tested against an in-process mock NTP server
-  bound to `127.0.0.1`, so CI never depends on the public internet. Tests that
-  do reach out are opt-in via `NTP_LITE_ONLINE_TESTS`.
+  Behaviour that needs a network is tested over real loopback sockets against a
+  peer the test itself drives, so CI never depends on the public internet. A
+  query that is meant to fail is aimed at an address RFC 5737 reserves for
+  documentation, which can never be a real host. Tests that do reach out to real
+  servers are opt-in via `NTP_LITE_ONLINE_TESTS`.
 
 ---
 
@@ -186,7 +230,7 @@ release-notes/         human written notes, one file per release
 - [x] **2** — NTPv4 packet encoding / decoding, Kiss-o'-Death handling
 - [x] **3** — socket abstraction (Winsock2 / POSIX), timeouts, DNS
 - [x] **4** — client core: offset and delay estimation, retries
-- [ ] **5** — public C API, CLI tool, installable CMake package
+- [x] **5** — public C API, CLI tool, installable CMake package
 - [ ] **6** — in-process mock NTP server, end-to-end tests
 - [ ] **7** — full CI matrix, sanitizers, static analysis
 - [ ] **8** — verified on a real Linux host over SSH
