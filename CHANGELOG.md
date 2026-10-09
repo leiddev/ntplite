@@ -230,12 +230,15 @@ else.
   has no business needing the internet.
 - Run against `pool.ntp.org`, `ntp.aliyun.com` and `time.cloudflare.com` from the
   Linux host, two rounds each: the tool and the script's own client agreed to
-  within 7.4 ms (worst case, on a 280 ms path), the reported time was within
-  14 ms of the host's own synchronised clock, and the wall clock moved less than
-  a microsecond away from the monotonic clock across every query. One anycast
-  name answered at stratum 2 and 3 within the same run, which is reported as a
-  note rather than a failure - the address really does answer from more than one
-  machine.
+  within 7.4 ms in every round (the loosest of them over a 280 ms path), the
+  reported time was within 14 ms of the host's own synchronised clock, and the
+  wall clock moved less than a microsecond away from the monotonic clock across
+  every query. The bound the script allows for the two offsets follows the two
+  round trips, which matters: over a badly asymmetric route the same two
+  measurements can disagree by tens of milliseconds without either being wrong.
+  One anycast name answered at stratum 2 and 3 within the same run, which is
+  reported as a note rather than a failure - the address really does answer from
+  more than one machine.
 
 ### Changed
 

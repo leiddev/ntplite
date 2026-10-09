@@ -52,7 +52,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple
+from typing import List, Sequence, Tuple
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 
@@ -429,6 +429,15 @@ def check_one_round(
             f"stratum {report['stratum']} to the tool, {own.stratum} to this script "
             f"(the address answers on more than one machine)"
         )
+    elif own.stratum >= 2:
+        # A stratum 2 server names the clock it follows, and both readers should
+        # find the same name.  A difference is reported rather than judged: an
+        # anycast address can answer from two machines that keep two upstreams.
+        ours = socket.inet_ntoa(own.reference_id)
+        if ours != report["reference"]:
+            round_result.notes.append(
+                f"reference id {report['reference']} to the tool, {ours} to this script"
+            )
     if report["attempts"] > 1:
         round_result.notes.append(f"{report['attempts']} requests were needed")
     return round_result
