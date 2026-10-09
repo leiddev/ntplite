@@ -75,11 +75,45 @@ NTP_TEST(status, ok_is_zero) {
   NTP_TEST_CHECK_EQ(0, static_cast<int>(NTP_LITE_OK));
 }
 
-NTP_TEST(status, unknown_code_falls_back_to_a_string) {
+// Regression test for an UndefinedBehaviorSanitizer finding: with a plain
+// (unfixed) enumeration type, C++ narrows the value range to the smallest
+// bit-field that fits the enumerators, and storing 9999 into it is undefined
+// behaviour.  ntplite_status_t therefore pins its underlying type to `int`,
+// because C callers - and FFI bindings - legitimately hand over arbitrary
+// integers.
+NTP_TEST(status, out_of_range_value_is_well_defined) {
   const ntplite_status_t bogus = static_cast<ntplite_status_t>(9999);
+  NTP_TEST_CHECK_EQ(9999, static_cast<int>(bogus));
+
   const char* text = ntplite_status_string(bogus);
   NTP_TEST_REQUIRE(text != NULL);
   NTP_TEST_CHECK_STREQ(text, "unknown status");
+}
+
+NTP_TEST(status, negative_value_is_well_defined) {
+  const ntplite_status_t bogus = static_cast<ntplite_status_t>(-1);
+  NTP_TEST_CHECK_EQ(-1, static_cast<int>(bogus));
+  NTP_TEST_CHECK_STREQ(ntplite_status_string(bogus), "unknown status");
+}
+
+// ---------------------------------------------------------------------------
+// ABI locking.  These assertions exist so that the layout of the C ABI can
+// only change on purpose.
+// ---------------------------------------------------------------------------
+NTP_TEST(abi, status_type_matches_int) {
+  NTP_TEST_CHECK_EQ(sizeof(int), sizeof(ntplite_status_t));
+}
+
+NTP_TEST(abi, status_values_are_frozen) {
+  NTP_TEST_CHECK_EQ(0, static_cast<int>(NTP_LITE_OK));
+  NTP_TEST_CHECK_EQ(1, static_cast<int>(NTP_LITE_ERR_INVALID));
+  NTP_TEST_CHECK_EQ(2, static_cast<int>(NTP_LITE_ERR_NETWORK));
+  NTP_TEST_CHECK_EQ(3, static_cast<int>(NTP_LITE_ERR_RESOLVE));
+  NTP_TEST_CHECK_EQ(4, static_cast<int>(NTP_LITE_ERR_TIMEOUT));
+  NTP_TEST_CHECK_EQ(5, static_cast<int>(NTP_LITE_ERR_PROTOCOL));
+  NTP_TEST_CHECK_EQ(6, static_cast<int>(NTP_LITE_ERR_KOD));
+  NTP_TEST_CHECK_EQ(7, static_cast<int>(NTP_LITE_ERR_UNSUPPORTED));
+  NTP_TEST_CHECK_EQ(8, static_cast<int>(NTP_LITE_ERR_INTERNAL));
 }
 
 }  // namespace

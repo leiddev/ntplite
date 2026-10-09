@@ -181,9 +181,9 @@ def main(argv: Sequence[str]) -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("paths", nargs="*", help="files or directories (default: whole repository)")
-    parser.add_argument("--check", action="store_true", help="do not modify; exit 1 on diff")
-    parser.add_argument("--list", action="store_true", help="list the files that would be processed")
-    parser.add_argument("--quiet", action="store_true", help="only report problems")
+    parser.add_argument("-c", "--check", action="store_true", help="do not modify; exit 1 on diff")
+    parser.add_argument("-l", "--list", action="store_true", help="list the files that would be processed")
+    parser.add_argument("-q", "--quiet", action="store_true", help="only report problems")
     arguments = parser.parse_args(argv)
 
     executable = find_clang_format()

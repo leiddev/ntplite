@@ -52,17 +52,34 @@ extern "C" {
  */
 #define NTP_LITE_C_API_VERSION 1
 
-/* Transport of the underlying query.  Values are part of the ABI. */
+/* ---------------------------------------------------------------------------
+ * Status codes
+ * ---------------------------------------------------------------------------
+ * The numeric values are spelled out explicitly because they are part of the
+ * ABI and must never move.
+ *
+ * The underlying type is pinned to `int` in C++ only.  Without that, C++ would
+ * give the enumeration the narrowest bit-field capable of holding the
+ * enumerators (0..8 -> 4 bits), and storing anything outside that range -
+ * which happens routinely when the value arrives from C, from an FFI binding,
+ * or from a corrupted buffer - would be undefined behaviour on load.  C
+ * already treats enumeration objects as int-sized, so both declarations agree
+ * on every supported compiler.
+ */
+#if defined(__cplusplus)
+typedef enum ntplite_status : int {
+#else
 typedef enum ntplite_status {
-  NTP_LITE_OK = 0,          /* success                                     */
-  NTP_LITE_ERR_INVALID,     /* invalid argument                            */
-  NTP_LITE_ERR_NETWORK,     /* socket create / send / recv failure         */
-  NTP_LITE_ERR_RESOLVE,     /* hostname could not be resolved              */
-  NTP_LITE_ERR_TIMEOUT,     /* no reply within the requested timeout       */
-  NTP_LITE_ERR_PROTOCOL,    /* malformed / unexpected NTP reply            */
-  NTP_LITE_ERR_KOD,         /* server sent a Kiss-o'-Death packet          */
-  NTP_LITE_ERR_UNSUPPORTED, /* unsupported platform or configuration       */
-  NTP_LITE_ERR_INTERNAL     /* unexpected internal failure                 */
+#endif
+  NTP_LITE_OK = 0,              /* success                                */
+  NTP_LITE_ERR_INVALID = 1,     /* invalid argument                       */
+  NTP_LITE_ERR_NETWORK = 2,     /* socket create / send / recv failure    */
+  NTP_LITE_ERR_RESOLVE = 3,     /* hostname could not be resolved         */
+  NTP_LITE_ERR_TIMEOUT = 4,     /* no reply within the requested timeout  */
+  NTP_LITE_ERR_PROTOCOL = 5,    /* malformed / unexpected NTP reply       */
+  NTP_LITE_ERR_KOD = 6,         /* server sent a Kiss-o'-Death packet     */
+  NTP_LITE_ERR_UNSUPPORTED = 7, /* unsupported platform or configuration  */
+  NTP_LITE_ERR_INTERNAL = 8     /* unexpected internal failure            */
 } ntplite_status_t;
 
 /* Returns the ABI revision this library was built with. */
