@@ -14,6 +14,7 @@
 #ifndef NTP_LITE_NTP_LITE_HPP
 #define NTP_LITE_NTP_LITE_HPP
 
+#include <ntplite/client.hpp>
 #include <ntplite/detail/config.hpp>
 #include <ntplite/detail/ntp_time.hpp>
 #include <ntplite/time.hpp>

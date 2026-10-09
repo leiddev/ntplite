@@ -9,8 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0] - unreleased
 
-Initial development. The library is not usable as an NTP client yet — see the
-roadmap in the README for what is left.
+Initial development. The C++ client core works and is tested against a real
+socket, but the public C entry point is not written yet — see the roadmap in the
+README for what is left.
 
 ### Added
 
@@ -87,6 +88,53 @@ roadmap in the README for what is left.
   and `NOMINMAX` are applied before the first Windows header is read, and a
   translation unit that has already included `<windows.h>` without them gets an
   explanation instead of a screenful of redefinition errors.
+
+#### Clock discipline
+
+- `ntplite::detail::clock_reading` pairs a reading of the wall clock with a
+  reading of the monotonic clock, so the two uses of time cannot be confused:
+  the wall clock gives the offset, the monotonic clock measures how long
+  something took.
+- `estimate_clock` turns the four timestamps of an exchange into a `clock_sample`
+  — the offset, the round trip delay, the time the server itself spent, and
+  whether the delay is plausible for the round trip it was measured over.
+- A clock step cannot corrupt a measurement. The round trip is measured on the
+  monotonic clock and supplied by the caller, never computed as T4 - T1, so a
+  wall-clock correction during an exchange cannot masquerade as network delay.
+- An implausible delay (the server claims it held the request longer than the
+  whole exchange took) is reported through `delay_is_plausible` rather than being
+  hidden or clamped.
+
+#### Client
+
+- `ntplite::query`, the whole client in one call, with `query_options` for the
+  port, IP version, NTP version and timeouts, and a `query_result` carrying the
+  four timestamps, the offset, the delay, the server's stratum and reference
+  identifier, and its root delay and dispersion.
+- Retries: a silent endpoint is asked up to three times, the last attempt
+  inheriting whatever budget is left so a quick retry cannot shorten the total
+  wait. A reply that is ours but unusable ends the exchange immediately, because
+  asking again earns the same answer.
+- Server fallback: a name that resolves to several addresses is tried in order
+  until one answers, all within one total timeout.
+- Anti-spoofing: a datagram is accepted only if it comes from the endpoint that
+  was asked *and* its origin timestamp echoes our request. Anything else is
+  discarded and the wait continues.
+- A Kiss-o'-Death is reported as `NTP_LITE_ERR_KOD` with its code, instead of
+  being folded into a generic protocol error, so the caller can tell "this server
+  refused" from "this server is broken".
+- The result object is cleared before every query, so a caller that reuses one
+  can never read a field left over from a previous answer.
+
+### Changed
+
+- Reference identifiers are no longer padded. `reference_id_text` used to render
+  all four octets exactly, so the common stratum 1 identifier `"GPS\0"` came out
+  as `"GPS."` and an empty identifier as `"...."`. Trailing NUL and space padding
+  is now dropped, giving `"GPS"` and `""`.
+- `is_kiss_of_death` now requires a reference identifier as well as stratum 0.
+  Stratum 0 with four NULs is an empty packet, not a refusal, and reporting it as
+  one told the caller a server had said "no" when it had said nothing.
 
 ### Fixed
 

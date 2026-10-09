@@ -17,8 +17,9 @@ A tiny, dependency-free **NTP client library** for C++11, with a stable C ABI.
   administrative privileges.
 - **Zero dependencies.** Not even a test framework.
 
-> Status: early development. The API below is the target interface and is
-> being filled in milestone by milestone — see [Roadmap](#roadmap).
+> Status: early development. The C++ client below works today; the C API is the
+> target interface and is being filled in milestone by milestone — see
+> [Roadmap](#roadmap).
 
 ---
 
@@ -30,10 +31,19 @@ A tiny, dependency-free **NTP client library** for C++11, with a stable C ABI.
 #include <cstdio>
 
 int main() {
-  // Planned interface; see the roadmap for what is available today.
-  ntplite::result r = ntplite::query("pool.ntp.org");
+  ntplite::query_result result;
+  const ntplite::error_code status = ntplite::query("pool.ntp.org", result);
 
-  std::printf("offset: %.3f ms, round trip: %.3f ms\n", r.offset_ms(), r.delay_ms());
+  if (status != ntplite::error_code::ok) {
+    std::printf("query failed: %s\n", ntplite::error_code_name(status));
+    return 1;
+  }
+
+  // The offset to add to the local clock, in milliseconds.  Nothing is applied;
+  // ntplite only measures.
+  std::printf("offset: %+.3f ms, round trip: %.3f ms\n",
+              result.offset_seconds() * 1000.0,
+              result.round_trip_delay_seconds() * 1000.0);
   return 0;
 }
 ```
@@ -175,7 +185,7 @@ release-notes/         human written notes, one file per release
 - [x] **1** — NTP ↔ Unix ↔ `std::chrono` time conversion, NTP era handling
 - [x] **2** — NTPv4 packet encoding / decoding, Kiss-o'-Death handling
 - [x] **3** — socket abstraction (Winsock2 / POSIX), timeouts, DNS
-- [ ] **4** — client core: offset and delay estimation, retries
+- [x] **4** — client core: offset and delay estimation, retries
 - [ ] **5** — public C API, CLI tool, installable CMake package
 - [ ] **6** — in-process mock NTP server, end-to-end tests
 - [ ] **7** — full CI matrix, sanitizers, static analysis

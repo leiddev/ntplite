@@ -319,10 +319,34 @@ const std::uint32_t kiss_tsrv = 0x54535256U;  ///< "TSRV" - no longer reserved
 const std::uint32_t kiss_bcst = 0x42435354U;  ///< "BCST" - broadcast denied
 const std::uint32_t kiss_cryp = 0x43525950U;  ///< "CRYP" - crypto unavailable
 
+/// True when the octet is a printable ASCII character, which is all a
+/// Kiss-o'-Death code or a stratum 1 source name is allowed to contain.
+inline bool is_printable_ascii(std::uint8_t octet) {
+  return octet >= 0x20U && octet <= 0x7EU;
+}
+
+/// The n-th octet (0 is the most significant) of a reference identifier.
+inline std::uint8_t reference_id_octet(std::uint32_t reference_id, int index) {
+  return static_cast<std::uint8_t>((reference_id >> (24 - 8 * index)) & 0xFFU);
+}
+
 /// True when the reply is a Kiss-o'-Death: stratum 0 with an ASCII reference
 /// identifier.
+///
+/// The stratum alone is not enough to decide.  A stratum 0 packet with an empty
+/// reference identifier is just a packet with nothing set in it - an
+/// uninitialised or truncated reply - and reporting that as a deliberate
+/// refusal would tell the caller a server said "no" when it said nothing at all.
 inline bool is_kiss_of_death(const packet& value) {
-  return value.stratum == stratum_kiss_of_death;
+  if (value.stratum != stratum_kiss_of_death || value.reference_id == 0U) {
+    return false;
+  }
+  for (int i = 0; i < 4; ++i) {
+    if (!is_printable_ascii(reference_id_octet(value.reference_id, i))) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /// Human readable name for a Kiss-o'-Death code, or "" when it is not one we
@@ -358,15 +382,90 @@ inline const char* kiss_code_name(std::uint32_t code) {
 
 /// Writes the four octets of a reference identifier as text.
 ///
-/// `out` must have room for five bytes.  Octets that are not printable ASCII
-/// become '.', so the result is always safe to print.
+/// `out` must have room for five bytes.  The name is four octets wide and is
+/// normally padded with NUL, and sometimes with spaces; trailing padding is
+/// dropped, so the usual "GPS" padded with a NUL reads "GPS" and not "GPS.".
+/// Octets inside the name that are not printable ASCII become '.', so the
+/// result is always safe to print.  A reference identifier made only of padding
+/// yields "".
 inline void reference_id_text(std::uint32_t reference_id, char* out) {
-  const std::uint32_t masks[4] = {0xFF000000U, 0x00FF0000U, 0x0000FF00U, 0x000000FFU};
-  for (int i = 0; i < 4; ++i) {
-    const std::uint8_t octet = static_cast<std::uint8_t>((reference_id & masks[i]) >> (24 - 8 * i));
-    out[i] = (octet >= 0x20U && octet <= 0x7EU) ? static_cast<char>(octet) : '.';
+  std::size_t length = 4;
+  while (length > 0) {
+    const std::uint8_t octet = reference_id_octet(reference_id, static_cast<int>(length) - 1);
+    if (octet != 0x00U && octet != 0x20U) {
+      break;
+    }
+    --length;
   }
-  out[4] = '\0';
+
+  for (std::size_t i = 0; i < length; ++i) {
+    const std::uint8_t octet = reference_id_octet(reference_id, static_cast<int>(i));
+    out[i] = is_printable_ascii(octet) ? static_cast<char>(octet) : '.';
+  }
+  out[length] = '\0';
+}
+
+/// Appends the decimal representation of `value` at `position` and returns the
+/// new end of the string.  `out` must have room for the three digits of the
+/// largest input (255).
+inline std::size_t append_decimal(char* out, std::size_t position, std::uint32_t value) {
+  char digits[3];
+  std::size_t count = 0;
+  do {
+    digits[count] = static_cast<char>('0' + (value % 10U));
+    ++count;
+    value /= 10U;
+  } while (value != 0U);
+
+  while (count > 0) {
+    --count;
+    out[position] = digits[count];
+    ++position;
+  }
+  return position;
+}
+
+/// Writes the reference identifier as text, interpreted according to the
+/// stratum the way RFC 5905 defines it:
+///
+///   * stratum 0 (a Kiss-o'-Death) and stratum 1 (a primary server) carry the
+///     four octet ASCII name of the clock source, e.g. "GPS" or "PPS";
+///   * stratum 2 and above carry the IPv4 address of the upstream server, which
+///     this renders as a dotted quad.
+///
+/// `out` must have room for 16 bytes - the longest an IPv4 address can be,
+/// including the terminator.  A capacity too small for the text that would be
+/// produced yields an empty string rather than a truncated one, because half an
+/// address is worse than none.
+inline void format_reference_id(std::uint8_t stratum, std::uint32_t reference_id, char* out,
+                                std::size_t capacity) {
+  if (out == NULL || capacity == 0) {
+    return;
+  }
+  out[0] = '\0';
+
+  if (stratum <= 1U) {
+    if (capacity < 5) {
+      return;
+    }
+    reference_id_text(reference_id, out);
+    return;
+  }
+
+  if (capacity < 16) {
+    return;
+  }
+
+  std::size_t position = 0;
+  for (int octet_index = 0; octet_index < 4; ++octet_index) {
+    if (octet_index != 0) {
+      out[position] = '.';
+      ++position;
+    }
+    const std::uint32_t octet = (reference_id >> (24 - 8 * octet_index)) & 0xFFU;
+    position = append_decimal(out, position, octet);
+  }
+  out[position] = '\0';
 }
 
 // ---------------------------------------------------------------------------
@@ -378,6 +477,19 @@ inline void reference_id_text(std::uint32_t reference_id, char* out) {
 /// Kiss-o'-Death.
 inline bool is_usable_stratum(std::uint8_t stratum) {
   return stratum >= 1U && stratum < stratum_unsynchronized;
+}
+
+/// True when `reply` echoes the transmit timestamp of `request` in its origin
+/// field, which is what binds a reply to the request that produced it.
+///
+/// This is checked on its own - rather than only inside validate_reply() -
+/// because a client has to be able to tell "this datagram is not an answer to
+/// my question" (a stray or spoofed packet, which is silently dropped and the
+/// wait continues) from "this is the answer, and it is bad" (which ends the
+/// exchange with a protocol error).
+inline bool reply_matches_request(const packet& reply, const packet& request) {
+  return reply.origin.seconds == request.transmit.seconds &&
+         reply.origin.fraction == request.transmit.fraction;
 }
 
 /// Checks whether `reply` is a well formed answer to `request`.
@@ -416,8 +528,7 @@ inline ntplite_status_t validate_reply(const packet& reply, const packet& reques
     return NTP_LITE_ERR_PROTOCOL;
   }
 
-  if (reply.origin.seconds != request.transmit.seconds ||
-      reply.origin.fraction != request.transmit.fraction) {
+  if (!reply_matches_request(reply, request)) {
     return NTP_LITE_ERR_PROTOCOL;
   }
 

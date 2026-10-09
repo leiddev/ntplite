@@ -452,9 +452,11 @@ NTP_TEST(reference_id, renders_printable_ascii) {
   reference_id_text(kiss_rate, text);
   NTP_TEST_CHECK_STREQ("RATE", text);
 
-  // A stratum 1 reference clock identifier, e.g. "GPS ".
+  // A stratum 1 reference clock identifier.  The name is four octets wide and
+  // padded, here with a space; the padding is not part of the name, so it is
+  // dropped rather than printed as a trailing blank.
   reference_id_text(0x47505320UL, text);
-  NTP_TEST_CHECK_STREQ("GPS ", text);
+  NTP_TEST_CHECK_STREQ("GPS", text);
 }
 
 NTP_TEST(reference_id, replaces_non_printable_octets) {
@@ -464,8 +466,9 @@ NTP_TEST(reference_id, replaces_non_printable_octets) {
   reference_id_text(0x0A000001UL, text);
   NTP_TEST_CHECK_STREQ("....", text);
 
+  // Four NULs are not a name at all, they are the absence of one.
   reference_id_text(0x00000000UL, text);
-  NTP_TEST_CHECK_STREQ("....", text);
+  NTP_TEST_CHECK_STREQ("", text);
 }
 
 // ---------------------------------------------------------------------------
