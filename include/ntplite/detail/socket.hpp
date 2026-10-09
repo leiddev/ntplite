@@ -449,9 +449,9 @@ class endpoint {
 ///
 /// `host` may be a name, an IPv4 literal or an IPv6 literal.  On success `out`
 /// is non-empty and holds every candidate in the resolver's preferred order
-/// (IPv6 first on a dual-stack host).  A client is expected to try them in
-/// turn, because "the first address of a round-robin DNS name is down" is the
-/// single most common way an NTP query fails.
+/// (IPv6 first on a dual-stack host), with repeats removed.  A client is
+/// expected to try them in turn, because "the first address of a round-robin DNS
+/// name is down" is the single most common way an NTP query fails.
 ///
 /// Fails with error_code::invalid_argument for a null or empty host, with
 /// error_code::unsupported when the family is compiled out, and with
@@ -513,7 +513,20 @@ inline bool resolve(const char* host, std::uint16_t port, address_family family,
       continue;
     }
     candidate.set_port(port);
-    out.push_back(candidate);
+    // The same endpoint can be offered twice - a hosts file that names a host on
+    // two lines, or a resolver answering from more than one source - and asking
+    // it again cannot produce a different answer, only a second timeout.  The
+    // resolver's order is kept; only repeats are dropped.
+    bool already_offered = false;
+    for (std::size_t i = 0; i < out.size(); ++i) {
+      if (out[i] == candidate) {
+        already_offered = true;
+        break;
+      }
+    }
+    if (!already_offered) {
+      out.push_back(candidate);
+    }
   }
   ::freeaddrinfo(results);
 

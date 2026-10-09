@@ -243,6 +243,25 @@ NTP_TEST(resolve, numeric_ipv6_literal_needs_no_dns) {
 #endif
 }
 
+NTP_TEST(resolve, a_name_is_offered_each_address_once) {
+  // A hosts file that lists a name twice, or a resolver that answers from more
+  // than one source, can hand back the same address more than once.  Trying it
+  // again cannot produce a different answer - only a second timeout and a second
+  // datagram - so the list must not repeat itself.  The count is deliberately
+  // not asserted: how many addresses "localhost" has is the machine's business.
+  std::vector<endpoint> found;
+  error_code ec = error_code::ok;
+  NTP_TEST_REQUIRE(ntplite::detail::resolve("localhost", 123, address_family::ipv4, found, ec));
+  NTP_TEST_CHECK_ERROR(ec, error_code::ok);
+  NTP_TEST_CHECK(!found.empty());
+
+  for (std::size_t i = 0; i < found.size(); ++i) {
+    for (std::size_t j = i + 1; j < found.size(); ++j) {
+      NTP_TEST_CHECK_NE(found[i].to_string(), found[j].to_string());
+    }
+  }
+}
+
 NTP_TEST(resolve, a_host_is_required) {
   std::vector<endpoint> found;
   error_code ec = error_code::ok;

@@ -6,6 +6,12 @@
 // answer is turned away.  The server is `mock_ntp_server.hpp`, which shares the
 // packet codec with the client under test - a deliberate weakness, which is why
 // `scripts/cross_validate_ntp.py` parses the same wire format independently.
+//
+// One case asks for the server by name, because resolving a name is part of the
+// path.  The rest ask for its address, because a name may resolve to more than
+// one candidate and each candidate legitimately gets the whole timeout budget
+// and its own attempts - so a count of either only means something when there is
+// exactly one candidate in play.
 
 #include <cmath>
 #include <cstdint>
@@ -30,25 +36,29 @@ using ::ntplite::query_result;
 ///
 /// The address family is pinned to IPv4 because the mock binds a v4 loopback
 /// socket: with the default "any", a resolver that offered "::1" first would
-/// make every case here wait out an extra timeout and count an extra attempt.
+/// make every case here wait out an extra timeout.
+///
+/// The 200 ms retry interval is a compromise: long enough that a machine which
+/// stalls for a moment still collects an answer to its first datagram, short
+/// enough that three attempts fit in the 900 ms budget used below.
 query_options options_for(const ::ntplite_test::mock_server& server) {
   query_options options;
   options.port = server.address().port();
   options.ip = ip_version::ipv4;
   options.server_timeout_ms = 2000;
   options.total_timeout_ms = 4000;
-  options.retry_interval_ms = 50;
+  options.retry_interval_ms = 200;
   return options;
 }
 
-/// The same, but with a budget that runs out quickly.
+/// The same, but with a budget that runs out after three attempts.
 ///
-/// 600 ms with a 50 ms retry interval leaves room for three datagrams with a
-/// wide margin, so the attempt count asserted below does not depend on how
+/// 900 ms against a 200 ms interval leaves 500 ms of slack for the last datagram
+/// to wait out, so the attempt counts asserted below do not depend on how
 /// quickly the machine gets round the loop.
 query_options impatient_options_for(const ::ntplite_test::mock_server& server) {
   query_options options = options_for(server);
-  options.server_timeout_ms = 600;
+  options.server_timeout_ms = 900;
   return options;
 }
 
@@ -60,6 +70,8 @@ NTP_TEST(end_to_end, answers_from_a_local_server) {
   error_code ec = error_code::ok;
   NTP_TEST_REQUIRE(server.start(behaviour, ec));
 
+  // The one case that goes through the resolver rather than straight to an
+  // address.
   query_result result;
   const error_code status = query(ntplite_test::mock_server_host, result, options_for(server));
 
@@ -68,7 +80,9 @@ NTP_TEST(end_to_end, answers_from_a_local_server) {
   NTP_TEST_CHECK(!result.kiss_of_death);
   NTP_TEST_CHECK(result.delay_is_plausible);
 
-  // Who answered, and what it said about itself.
+  // Who answered, and what it said about itself.  The reporting endpoint has to
+  // be the address the answer could possibly have come from, so this also pins
+  // down that the name resolved to something that reaches us.
   NTP_TEST_CHECK_EQ(result.server, server.address().to_string());
   NTP_TEST_CHECK_EQ(result.stratum, 2);
   NTP_TEST_CHECK_EQ(result.mode, ::ntplite::detail::mode::server);
@@ -80,9 +94,9 @@ NTP_TEST(end_to_end, answers_from_a_local_server) {
   NTP_TEST_CHECK_EQ(result.precision, ::ntplite::detail::default_precision);
   NTP_TEST_CHECK_NEAR(duration_seconds(result.root_delay), 0.001, 1e-5);
   NTP_TEST_CHECK_NEAR(duration_seconds(result.root_dispersion), 0.002, 1e-5);
+  NTP_TEST_CHECK(result.attempts >= 1);
 
   // One question asked, one answer given.
-  NTP_TEST_CHECK_EQ(result.attempts, 1);
   NTP_TEST_CHECK_EQ(server.requests_seen(), 1);
   NTP_TEST_CHECK_EQ(server.replies_sent(), 1);
 
@@ -114,9 +128,10 @@ NTP_TEST(end_to_end, reports_a_shifted_clock) {
   error_code ec = error_code::ok;
   NTP_TEST_REQUIRE(server.start(behaviour, ec));
 
+  const std::string host = server.address().address();
+
   query_result ahead;
-  NTP_TEST_CHECK(query(ntplite_test::mock_server_host, ahead, options_for(server)) ==
-                 error_code::ok);
+  NTP_TEST_CHECK(query(host.c_str(), ahead, options_for(server)) == error_code::ok);
   NTP_TEST_REQUIRE(ahead.valid);
 
   // Absolute rather than CHECK_NEAR's relative fallback, which would let a five
@@ -132,8 +147,7 @@ NTP_TEST(end_to_end, reports_a_shifted_clock) {
   NTP_TEST_REQUIRE(server.start(behaviour, ec));
 
   query_result behind;
-  NTP_TEST_CHECK(query(ntplite_test::mock_server_host, behind, options_for(server)) ==
-                 error_code::ok);
+  NTP_TEST_CHECK(query(host.c_str(), behind, options_for(server)) == error_code::ok);
   NTP_TEST_REQUIRE(behind.valid);
 
   NTP_TEST_CHECK(std::fabs(behind.offset_seconds() + 2.0) < 0.01);
@@ -147,9 +161,10 @@ NTP_TEST(end_to_end, answers_a_retry_after_ignoring_the_first_request) {
   error_code ec = error_code::ok;
   NTP_TEST_REQUIRE(server.start(behaviour, ec));
 
+  const std::string host = server.address().address();
+
   query_result result;
-  NTP_TEST_CHECK(query(ntplite_test::mock_server_host, result, options_for(server)) ==
-                 error_code::ok);
+  NTP_TEST_CHECK(query(host.c_str(), result, options_for(server)) == error_code::ok);
   NTP_TEST_REQUIRE(result.valid);
 
   // One retry, and the retry is the one that was answered: a client that gave up
@@ -168,8 +183,10 @@ NTP_TEST(end_to_end, reports_a_kiss_of_death) {
   error_code ec = error_code::ok;
   NTP_TEST_REQUIRE(server.start(behaviour, ec));
 
+  const std::string host = server.address().address();
+
   query_result result;
-  const error_code status = query(ntplite_test::mock_server_host, result, options_for(server));
+  const error_code status = query(host.c_str(), result, options_for(server));
 
   NTP_TEST_CHECK(status == error_code::kiss_of_death);
   NTP_TEST_CHECK(!result.valid);
@@ -191,8 +208,10 @@ NTP_TEST(end_to_end, ends_the_exchange_on_an_unusable_answer) {
   error_code ec = error_code::ok;
   NTP_TEST_REQUIRE(server.start(behaviour, ec));
 
+  const std::string host = server.address().address();
+
   query_result result;
-  const error_code status = query(ntplite_test::mock_server_host, result, options_for(server));
+  const error_code status = query(host.c_str(), result, options_for(server));
 
   NTP_TEST_CHECK(status == error_code::protocol_error);
   NTP_TEST_CHECK(!result.valid);
@@ -212,9 +231,10 @@ NTP_TEST(end_to_end, discards_a_truncated_datagram) {
   error_code ec = error_code::ok;
   NTP_TEST_REQUIRE(server.start(behaviour, ec));
 
+  const std::string host = server.address().address();
+
   query_result result;
-  const error_code status =
-      query(ntplite_test::mock_server_host, result, impatient_options_for(server));
+  const error_code status = query(host.c_str(), result, impatient_options_for(server));
 
   // A short datagram is a runt, not an answer: it is dropped and the request is
   // sent again until the budget is gone.  The server answers every time.
@@ -232,9 +252,10 @@ NTP_TEST(end_to_end, discards_a_garbage_datagram) {
   error_code ec = error_code::ok;
   NTP_TEST_REQUIRE(server.start(behaviour, ec));
 
+  const std::string host = server.address().address();
+
   query_result result;
-  const error_code status =
-      query(ntplite_test::mock_server_host, result, impatient_options_for(server));
+  const error_code status = query(host.c_str(), result, impatient_options_for(server));
 
   // Noise neither matches the request's origin nor survives decoding, so it must
   // never be mistaken for an answer - and must not be mistaken for a refusal
@@ -254,9 +275,10 @@ NTP_TEST(end_to_end, accepts_a_duplicated_answer_once) {
   error_code ec = error_code::ok;
   NTP_TEST_REQUIRE(server.start(behaviour, ec));
 
+  const std::string host = server.address().address();
+
   query_result result;
-  NTP_TEST_CHECK(query(ntplite_test::mock_server_host, result, options_for(server)) ==
-                 error_code::ok);
+  NTP_TEST_CHECK(query(host.c_str(), result, options_for(server)) == error_code::ok);
   NTP_TEST_REQUIRE(result.valid);
 
   // The second copy arrives after the first has been accepted, and one answer is
@@ -274,9 +296,10 @@ NTP_TEST(end_to_end, times_out_on_a_silent_server) {
   error_code ec = error_code::ok;
   NTP_TEST_REQUIRE(server.start(behaviour, ec));
 
+  const std::string host = server.address().address();
+
   query_result result;
-  const error_code status =
-      query(ntplite_test::mock_server_host, result, impatient_options_for(server));
+  const error_code status = query(host.c_str(), result, impatient_options_for(server));
 
   NTP_TEST_CHECK(status == error_code::timeout);
   NTP_TEST_CHECK(!result.valid);
@@ -300,9 +323,10 @@ NTP_TEST(end_to_end, flags_a_server_that_overstates_its_processing_time) {
   error_code ec = error_code::ok;
   NTP_TEST_REQUIRE(server.start(behaviour, ec));
 
+  const std::string host = server.address().address();
+
   query_result result;
-  NTP_TEST_CHECK(query(ntplite_test::mock_server_host, result, options_for(server)) ==
-                 error_code::ok);
+  NTP_TEST_CHECK(query(host.c_str(), result, options_for(server)) == error_code::ok);
   NTP_TEST_REQUIRE(result.valid);
 
   NTP_TEST_CHECK_NEAR(duration_seconds(result.server_processing), 0.2, 1e-6);

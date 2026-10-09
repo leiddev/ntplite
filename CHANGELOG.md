@@ -214,6 +214,12 @@ README for what is left.
   `CHECK_STREQ(make_text().c_str(), "x")` used to capture a pointer into a
   temporary that was destroyed before the comparison ran, so the assertion
   could pass or fail depending on what the stack happened to hold.
+- The resolver no longer offers the same endpoint twice. A hosts file that names
+  a host on several lines, or a resolver that answers from more than one source,
+  can put the same address in the results more than once; the client then asked
+  it again, spending a whole extra timeout and a second datagram on a question it
+  had already had answered. Repeats are now dropped, keeping the resolver's
+  order.
 
 [Unreleased]: https://github.com/leiddev/ntplite/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/leiddev/ntplite/releases/tag/v0.1.0
