@@ -16,6 +16,10 @@
 #   pwsh scripts/remote_build.ps1 -SanitizerList thread
 #   pwsh scripts/remote_build.ps1 -SkipSync            # reuse what is there
 #   pwsh scripts/remote_build.ps1 -RemoteDir '~/tmp/ntplite'
+#   pwsh scripts/remote_build.ps1 -OnlineTests -TestFilter 'ntplite.real_servers'
+#
+# The last one is the verification against real NTP servers: it needs a network
+# that lets UDP port 123 out, so it is opt-in and never runs in CI.
 #
 # ExtraConfigureArguments is a way to try a configuration before it earns a CI
 # job of its own, for example:
@@ -34,6 +38,7 @@ param(
   [string] $ExtraConfigureArguments = '',
   [switch] $SkipSync,
   [switch] $OnlineTests,
+  [string] $TestFilter = '',
   [switch] $KeepBuildDirectory
 )
 
@@ -117,10 +122,15 @@ $clean = if ($KeepBuildDirectory) { '' } else { 'rm -rf build-remote;' }
 # same binaries), and ThreadSanitizer has the same appetite for address space.
 # Disabling ASLR for the test run makes it deterministic; this is an environment
 # quirk, not a defect in ntplite.
-$ctest = if ($sanitizeFlag -ne 'OFF') {
-  'setarch "$(uname -m)" -R ctest --test-dir build-remote --output-on-failure'
+$selector = if ([string]::IsNullOrWhiteSpace($TestFilter)) {
+  ''
 } else {
-  'ctest --test-dir build-remote --output-on-failure'
+  " --tests-regex '$TestFilter'"
+}
+$ctest = if ($sanitizeFlag -ne 'OFF') {
+  'setarch "$(uname -m)" -R ctest --test-dir build-remote --output-on-failure' + $selector
+} else {
+  'ctest --test-dir build-remote --output-on-failure' + $selector
 }
 
 Write-Step 'Configure / build / test'

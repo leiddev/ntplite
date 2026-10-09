@@ -129,3 +129,30 @@ if(NTP_LITE_BUILD_TOOLS AND TARGET ntplite_cli)
     message(STATUS "Python 3 not found: the cross-validation test will not be registered")
   endif()
 endif()
+
+# ---------------------------------------------------------------------------
+# The same tool against real servers on the public internet, which is the one
+# thing no amount of loopback can stand in for: a stratum 1 or 2 machine, a
+# network in between, and a clock on the other end that somebody else keeps
+# right.  Opt in with -DNTP_LITE_ONLINE_TESTS=ON, because it needs a network that
+# lets UDP port 123 out and a machine whose own clock is synchronised; it is
+# deliberately kept out of the default run and out of CI, which has to be
+# repeatable.
+# ---------------------------------------------------------------------------
+if(NTP_LITE_ONLINE_TESTS)
+  if(NTP_LITE_BUILD_TOOLS AND TARGET ntplite_cli)
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+      add_test(
+        NAME ntplite.real_servers
+        COMMAND "${Python3_EXECUTABLE}"
+                "${PROJECT_SOURCE_DIR}/scripts/verify_real_servers.py"
+                --tool "$<TARGET_FILE:ntplite_cli>")
+      set_tests_properties(ntplite.real_servers PROPERTIES TIMEOUT 300 LABELS "online")
+    else()
+      message(STATUS "Python 3 not found: the real-server verification will not be registered")
+    endif()
+  else()
+    message(STATUS "NTP_LITE_ONLINE_TESTS needs the command line tool: set NTP_LITE_BUILD_TOOLS=ON")
+  endif()
+endif()

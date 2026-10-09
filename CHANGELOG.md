@@ -9,9 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0] - unreleased
 
-Initial development. The C++ client core works and is tested against a real
-socket, but the public C entry point is not written yet — see the roadmap in the
-README for what is left.
+Initial development. The client core, the public C API, the command line tool
+and the installable CMake package are in place, tested against a real socket, and
+verified against real NTP servers on the public internet. Nothing here sets the
+system clock: the library reads a server and hands the answer back.
 
 ### Added
 
@@ -38,7 +39,8 @@ README for what is left.
   `clang-format` gate, a version-hygiene check, an install + `find_package`
   packaging job, a coverage report, and CodeQL analysis.
 - Developer tooling: `scripts/format.py`, `scripts/check_version_sync.py`,
-  `scripts/cross_validate_ntp.py` and `scripts/remote_build.ps1`.
+  `scripts/cross_validate_ntp.py`, `scripts/verify_real_servers.py` and
+  `scripts/remote_build.ps1`.
 - Repository files: `.clang-format`, `.clang-tidy`, `.editorconfig`,
   `.gitattributes`, `.gitignore`, `LICENSE` (MIT), `README.md`, `release-notes/`.
 
@@ -201,6 +203,40 @@ README for what is left.
   of its last request - a race that Linux and Windows hide by delivering loopback
   packets inside the send call, and that macOS lost on a loaded runner.
 
+#### Verification against real servers
+
+Everything above is loopback: a machine talking to itself, with a clock a few
+microseconds away, at stratum 16 if it says anything at all. The last check
+points the tool at servers on the public internet, where the stratum is 1 or 2,
+the network is real, and the clock on the other end is kept right by somebody
+else.
+
+- `scripts/verify_real_servers.py` asks a real server with the tool, then asks
+  the same machine again with an NTP client written longhand in the script, and
+  requires the two offsets to agree within what the two round trips allow. It
+  also reads the server's root delay and root dispersion out of its own answer
+  and compares them with the tool's, so a field taken from the wrong bytes would
+  be seen; requires a stratum of at least 1, an answer that echoes the request,
+  and a reference id from any server that claims to be synchronised; and checks
+  the reported instant against the clock the host keeps for itself.
+- It also watches the monotonic and the wall clock move together across each
+  query. That is what "the local clock was never touched" means when it is
+  measured rather than asserted: a program that had stepped the system time would
+  part the two clocks immediately, and the check would fail.
+- Wired to `NTP_LITE_ONLINE_TESTS`, which had been an option with nothing behind
+  it: with `-DNTP_LITE_ONLINE_TESTS=ON` CTest registers `ntplite.real_servers`,
+  and `scripts/remote_build.ps1 -OnlineTests -TestFilter 'ntplite.real_servers'`
+  runs it on a remote host. It stays out of CI, which has to be repeatable and
+  has no business needing the internet.
+- Run against `pool.ntp.org`, `ntp.aliyun.com` and `time.cloudflare.com` from the
+  Linux host, two rounds each: the tool and the script's own client agreed to
+  within 7.4 ms (worst case, on a 280 ms path), the reported time was within
+  14 ms of the host's own synchronised clock, and the wall clock moved less than
+  a microsecond away from the monotonic clock across every query. One anycast
+  name answered at stratum 2 and 3 within the same run, which is reported as a
+  note rather than a failure - the address really does answer from more than one
+  machine.
+
 ### Changed
 
 - `NTP_LITE_SANITIZE` accepts a list of sanitizers as well as the on/off
@@ -215,6 +251,9 @@ README for what is left.
 - `is_kiss_of_death` now requires a reference identifier as well as stratum 0.
   Stratum 0 with four NULs is an empty packet, not a refusal, and reporting it as
   one told the caller a server had said "no" when it had said nothing.
+- `scripts/remote_build.ps1` can run a subset of the tests with `-TestFilter`,
+  which is what makes the opt-in real-server check usable on a remote host without
+  waiting for the other hundred and fifty cases first.
 
 ### Fixed
 

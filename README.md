@@ -171,7 +171,7 @@ cmake --preset unix-sanitize      # Ninja + ASan/UBSan
 | `NTP_LITE_BUILD_TOOLS` | `ON` | Build the `ntplite` command line tool |
 | `NTP_LITE_BUILD_EXAMPLES` | `ON` | Build the example programs |
 | `NTP_LITE_BUILD_TESTS` | `ON` | Build the test suite |
-| `NTP_LITE_ONLINE_TESTS` | `OFF` | Register tests that need real internet access |
+| `NTP_LITE_ONLINE_TESTS` | `OFF` | Register the verification against real NTP servers |
 | `NTP_LITE_WERROR` | `OFF` | Treat compiler warnings as errors |
 | `NTP_LITE_SANITIZE` | `OFF` | Sanitizers to build with: `ON` for ASan + UBSan, or a list such as `thread` (GCC/Clang only) |
 | `NTP_LITE_INSTALL` | `ON` | Generate install / packaging rules |
@@ -183,6 +183,7 @@ python scripts/format.py --check         # clang-format gate (same script CI run
 python scripts/format.py                 # reformat in place
 python scripts/check_version_sync.py     # version consistency across the tree
 python scripts/cross_validate_ntp.py     # the tool, against a second NTP implementation
+python scripts/verify_real_servers.py    # the tool, against real servers on the internet
 ```
 
 `cross_validate_ntp.py` builds an NTP server out of `struct` and arithmetic of
@@ -191,6 +192,27 @@ back. The C++ tests use a mock server that shares the library's packet codec, so
 a shared misreading of RFC 5905 would be invisible there; this script is the
 check that it is not. It needs the tool to be built, and is registered with CTest
 as `ntplite.cross_validation`.
+
+`verify_real_servers.py` is the same idea pointed outwards, at the servers
+everybody else uses. It asks a real server with the tool, asks the same machine
+again with an NTP client written longhand in the script, and requires the two to
+agree within what the two round trips allow; it also checks the reported instant
+against the clock the host keeps for itself, and watches the wall clock and the
+monotonic clock move together across the query, which is how "the local clock was
+never touched" is actually verified. It needs a network that lets UDP port 123
+out, so it is opt-in: configure with `-DNTP_LITE_ONLINE_TESTS=ON` and CTest
+registers it as `ntplite.real_servers`.
+
+```sh
+cmake -S . -B build -DNTP_LITE_ONLINE_TESTS=ON -DNTP_LITE_BUILD_TOOLS=ON
+cmake --build build
+ctest --test-dir build -R ntplite.real_servers --output-on-failure
+
+python scripts/verify_real_servers.py --servers pool.ntp.org,time.cloudflare.com --repeat 2
+```
+
+Both ways are safe to run on a machine whose clock matters: neither the library
+nor the script sets the system time, and the script would fail if it had been.
 
 ---
 
@@ -216,7 +238,11 @@ as `ntplite.cross_validation`.
   compiled tool against that, so the two cannot be wrong in the same way. A
   query that is meant to fail is aimed at an address RFC 5737 reserves for
   documentation, which can never be a real host. Tests that do reach out to real
-  servers are opt-in via `NTP_LITE_ONLINE_TESTS`.
+  servers are opt-in via `NTP_LITE_ONLINE_TESTS`, and those are the ones that
+  check the assumption everything else rests on: that a real stratum 1 or 2
+  machine, over a real network, with a clock kept right by somebody else, is
+  something this client reads correctly. `scripts/verify_real_servers.py` is that
+  check, and it needs no NTP daemon on the host to judge the answer.
 
 ---
 
@@ -282,7 +308,10 @@ network error a line before its first datagram.
 - [x] **5** — public C API, CLI tool, installable CMake package
 - [x] **6** — in-process mock NTP server, end-to-end tests, Python cross-validation
 - [x] **7** — full CI matrix, sanitizers, static analysis
-- [ ] **8** — verified on a real Linux host over SSH
+- [x] **8** — verified against real servers, driven from a real Linux host over SSH
+
+Every milestone is in. The library does not set the system clock, does not need
+one, and does not have one to set: it reads a server and hands the answer back.
 
 See [CHANGELOG.md](CHANGELOG.md) for what has actually landed.
 
